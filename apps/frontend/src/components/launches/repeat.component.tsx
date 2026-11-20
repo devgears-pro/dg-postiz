@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useMemo, useState } from 'react';
+import { FC, useState } from 'react';
 import { Select } from '@gitroom/react/form/select';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { useClickOutside } from '@mantine/hooks';
@@ -11,38 +11,47 @@ const getList = (t: (key: string, fallback: string) => string) => [
   {
     value: 1,
     label: t('day', 'Day'),
+    repeatKey: 'repeat_every_day',
   },
   {
     value: 2,
     label: t('two_days', 'Two Days'),
+    repeatKey: 'repeat_every_two_days',
   },
   {
     value: 3,
     label: t('three_days', 'Three Days'),
+    repeatKey: 'repeat_every_three_days',
   },
   {
     value: 4,
     label: t('four_days', 'Four Days'),
+    repeatKey: 'repeat_every_four_days',
   },
   {
     value: 5,
     label: t('five_days', 'Five Days'),
+    repeatKey: 'repeat_every_five_days',
   },
   {
     value: 6,
     label: t('six_days', 'Six Days'),
+    repeatKey: 'repeat_every_six_days',
   },
   {
     value: 7,
     label: t('week', 'Week'),
+    repeatKey: 'repeat_every_week',
   },
   {
     value: 14,
     label: t('two_weeks', 'Two Weeks'),
+    repeatKey: 'repeat_every_two_weeks',
   },
   {
     value: 30,
     label: t('month', 'Month'),
+    repeatKey: 'repeat_every_month',
   },
   {
     value: null,
@@ -66,12 +75,7 @@ export const RepeatComponent: FC<{
     setIsOpen(false);
   });
 
-  const everyLabel = useMemo(() => {
-    if (!repeat) {
-      return '';
-    }
-    return list.find((p) => p.value === repeat)?.label;
-  }, [repeat, list]);
+  const recurrence = list.find((p) => p.value === repeat);
 
   if (props.list) {
     // the radio list starts with "do not repeat", the dropdown ends with cancel
@@ -125,8 +129,11 @@ export const RepeatComponent: FC<{
           <RepeatIcon />
         </div>
         <div className="cursor-pointer">
-          {repeat
-            ? `${t('repeat_post_every_label', 'Repeat Post Every')} ${everyLabel}`
+          {recurrence?.repeatKey
+            ? t(
+                recurrence.repeatKey,
+                `${t('repeat_post_every_label', 'Repeat Post Every')} ${recurrence.label}`
+              )
             : t('repeat_post_every', 'Repeat Post Every...')}
         </div>
         <div className="cursor-pointer">

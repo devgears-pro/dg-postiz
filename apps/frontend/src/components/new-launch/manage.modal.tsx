@@ -325,7 +325,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                   : t(
                       'delete_from_channels',
                       'Delete from {{channels}} channels',
-                      { channels: ids.length }
+                      { channels: ids.length, count: ids.length }
                     )
               }
               onConfirm={(ids) => {

@@ -284,8 +284,11 @@ const PriceBreakdown: FC = () => {
         {nextBillingTotal && nextBillingDate && (
           <div className="flex justify-between items-center text-[13px] text-textColor/60">
             <span>
-              {t('billing_then', 'Then')} {nextBillingTotal}{' '}
-              {t('billing_on', 'on')} {nextBillingDate}
+              {t(
+                'billing_next_payment_on',
+                `${t('billing_then', 'Then')} {{amount}} ${t('billing_on', 'on')} {{date}}`,
+                { amount: nextBillingTotal, date: nextBillingDate }
+              )}
             </span>
           </div>
         )}

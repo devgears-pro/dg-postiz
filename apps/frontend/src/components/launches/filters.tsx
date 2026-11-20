@@ -2,7 +2,6 @@
 
 import { useCalendar, ListStateFilter } from '@gitroom/frontend/components/launches/calendar.context';
 import clsx from 'clsx';
-import dayjs from 'dayjs';
 import { useCallback, useState } from 'react';
 import { SelectCustomer } from '@gitroom/frontend/components/launches/select.customer';
 import { SelectChannels } from '@gitroom/frontend/components/launches/select.channels';
@@ -50,12 +49,11 @@ export const Filters = () => {
 
   // Set dayjs locale based on current language
   const currentLanguage = i18next.resolvedLanguage || 'en';
-  dayjs.locale();
 
   // Calculate display date range text, short is the phone version
   const getDisplayText = (short?: boolean) => {
-    const startDate = newDayjs(calendar.startDate);
-    const endDate = newDayjs(calendar.endDate);
+    const startDate = newDayjs(calendar.startDate).locale(currentLanguage);
+    const endDate = newDayjs(calendar.endDate).locale(currentLanguage);
 
     switch (calendar.display) {
       case 'day':
