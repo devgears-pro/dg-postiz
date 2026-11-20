@@ -351,7 +351,7 @@ const TikTokSettings: FC<{
               {t(
                 'by_posting_you_agree_to_tiktoks',
                 "By posting, you agree to TikTok's"
-              )}
+              )}{' '}
               {[
                 brand_organic_toggle || brand_content_toggle ? (
                   <a

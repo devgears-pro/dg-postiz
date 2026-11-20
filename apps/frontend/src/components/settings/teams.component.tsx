@@ -18,17 +18,8 @@ import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import copy from 'copy-to-clipboard';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 
-const roles = [
-  {
-    name: 'User',
-    value: 'USER',
-  },
-  {
-    name: 'Admin',
-    value: 'ADMIN',
-  },
-];
 export const AddMember = () => {
+  const t = useT();
   const modals = useModals();
   const fetch = useFetch();
   const toast = useToaster();
@@ -73,10 +64,8 @@ export const AddMember = () => {
       modals.closeAll();
       toast.show(t('link_copied_to_clipboard', 'Link copied to clipboard'));
     },
-    []
+    [t]
   );
-
-  const t = useT();
 
   return (
     <FormProvider {...form}>
@@ -85,17 +74,15 @@ export const AddMember = () => {
           {sendEmail && (
             <Input
               label="Email"
+              translationKey="label_email"
               placeholder={t('enter_email', 'Enter email')}
               name="email"
             />
           )}
-          <Select label="Role" name="role">
+          <Select label="Role" translationKey="label_role" name="role">
             <option value="">{t('select_role', 'Select Role')}</option>
-            {roles.map((role) => (
-              <option key={role.value} value={role.value}>
-                {role.name}
-              </option>
-            ))}
+            <option value="USER">{t('user', 'User')}</option>
+            <option value="ADMIN">{t('admin', 'Admin')}</option>
           </Select>
           <div className="flex gap-[5px]">
             <div>
@@ -158,7 +145,10 @@ export const TeamsComponent = () => {
       async () => {
         if (
           !(await deleteDialog(
-            t('are_you_sure_remove_team_member', 'Are you sure you want to remove this team member?')
+            t(
+              'are_you_sure_remove_team_member',
+              'Are you sure you want to remove this team member?'
+            )
           ))
         ) {
           return;
