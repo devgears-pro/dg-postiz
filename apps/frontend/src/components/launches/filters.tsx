@@ -2,6 +2,7 @@
 
 import { useCalendar, ListStateFilter } from '@gitroom/frontend/components/launches/calendar.context';
 import clsx from 'clsx';
+import type { Dayjs } from 'dayjs';
 import { useCallback, useState } from 'react';
 import { SelectCustomer } from '@gitroom/frontend/components/launches/select.customer';
 import { SelectChannels } from '@gitroom/frontend/components/launches/select.channels';
@@ -188,7 +189,7 @@ export const Filters = () => {
 
   const next = useCallback(() => {
     const currentStart = newDayjs(calendar.startDate);
-    let nextStart: dayjs.Dayjs;
+    let nextStart: Dayjs;
 
     switch (calendar.display) {
       case 'day':
@@ -218,7 +219,7 @@ export const Filters = () => {
 
   const previous = useCallback(() => {
     const currentStart = newDayjs(calendar.startDate);
-    let prevStart: dayjs.Dayjs;
+    let prevStart: Dayjs;
 
     switch (calendar.display) {
       case 'day':

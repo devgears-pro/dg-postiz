@@ -7,7 +7,9 @@ import { useClickOutside } from '@mantine/hooks';
 import { isUSCitizen } from '@gitroom/frontend/components/launches/helpers/isuscitizen.utils';
 import clsx from 'clsx';
 import { RepeatIcon, DropdownArrowIcon } from '@gitroom/frontend/components/ui/icons';
-const getList = (t: (key: string, fallback: string) => string) => [
+const getList = (
+  t: (key: string, fallback: string) => string
+): { value: number | null; label: string; repeatKey?: string }[] => [
   {
     value: 1,
     label: t('day', 'Day'),
