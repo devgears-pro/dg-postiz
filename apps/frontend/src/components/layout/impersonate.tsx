@@ -13,6 +13,7 @@ import { useModals } from '@gitroom/frontend/components/layout/new-modal';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { Button } from '@gitroom/react/form/button';
 import { ImportDebugPostModal } from '@gitroom/frontend/components/launches/import-debug-post.modal';
+import { CreateOrganization } from '@gitroom/frontend/components/admin/admin-create-organization.component';
 import { useForm, FormProvider } from 'react-hook-form';
 import { classValidatorResolver } from '@hookform/resolvers/class-validator';
 import { AdminAddTeamMemberDto } from '@gitroom/nestjs-libraries/dtos/settings/admin.add.team.member.dto';
@@ -1121,6 +1122,7 @@ export const Impersonate = () => {
                 </div>
                 {user?.tier?.current === 'FREE' && <Subscription />}
                 {user?.tier?.team_members && <AddTeamMember />}
+                <CreateOrganization />
                 {billingEnabled && <ManageBilling />}
                 <SwitchUser />
               </div>
@@ -1142,6 +1144,7 @@ export const Impersonate = () => {
                 <AddAnnouncement />
                 <ViewErrors />
                 <ViewStats />
+                <CreateOrganization />
               </div>
             )}
           </div>
