@@ -16,7 +16,13 @@ export const Input = ({
   onUpload,
   hideStopButton = false,
   onChange,
-}: InputProps & { onChange: (value: string) => void }) => {
+  onPasteFiles,
+  hasAttachments = false,
+}: InputProps & {
+  onChange: (value: string) => void;
+  onPasteFiles?: (files: File[]) => void;
+  hasAttachments?: boolean;
+}) => {
   const context = useChatContext();
   const copilotContext = useCopilotContext();
   const showPoweredBy = !copilotContext.copilotApiConfig?.publicApiKey;
@@ -54,8 +60,12 @@ export const Input = ({
 
   const { interrupt } = useCopilotChatInternal();
   const canSend = useMemo(() => {
-    return !isInProgress && text.trim().length > 0 && !interrupt;
-  }, [interrupt, isInProgress, text]);
+    return (
+      !isInProgress &&
+      (text.trim().length > 0 || hasAttachments) &&
+      !interrupt
+    );
+  }, [interrupt, isInProgress, text, hasAttachments]);
 
   const canStop = useMemo(() => {
     return isInProgress && !hideStopButton;
@@ -82,6 +92,16 @@ export const Input = ({
           }}
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={() => setIsComposing(false)}
+          onPaste={(event) => {
+            const files = Array.from(event.clipboardData?.files || []).filter(
+              (file) => file.type.startsWith('image/')
+            );
+            if (!files.length || !onPasteFiles) {
+              return;
+            }
+            event.preventDefault();
+            onPasteFiles(files);
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey && !isComposing) {
               event.preventDefault();

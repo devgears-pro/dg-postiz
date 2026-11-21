@@ -39,6 +39,7 @@ import { fromUtc } from '@gitroom/frontend/components/layout/set.timezone';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
 import { ExistingDataContextProvider } from '@gitroom/frontend/components/launches/helpers/use.existing.data';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useToaster } from '@gitroom/react/toaster/toaster';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
 
 export const AgentChat: FC = () => {
@@ -184,6 +185,9 @@ const Message: FC<UserMessageProps> = (props) => {
       .replace(/Video: (http.*mp4\n)/g, (match, p1) => {
         return `<video controls class="h-[150px] w-[150px] rounded-[8px] mb-[10px]"><source src="${p1.trim()}" type="video/mp4">Your browser does not support the video tag.</video>`;
       })
+      .replace(/Image: (http\S+) \(media [^)]+\)/g, (match, p1) => {
+        return `<img src="${p1.trim()}" class="h-[150px] w-[150px] max-w-full border border-newBgColorInner" />`;
+      })
       .replace(/Image: (http.*\n)/g, (match, p1) => {
         return `<img src="${p1.trim()}" class="h-[150px] w-[150px] max-w-full border border-newBgColorInner" />`;
       })
@@ -195,7 +199,8 @@ const Message: FC<UserMessageProps> = (props) => {
         (match, p1) => {
           return ``;
         }
-      );
+      )
+      .replace(/\[--Media--\]/g, '');
   }, [props.message?.content]);
   return (
     <div
@@ -208,26 +213,85 @@ const NewInput: FC<InputProps> = (props) => {
   const [media, setMedia] = useState([] as { path: string; id: string }[]);
   const [value, setValue] = useState('');
   const { properties } = useContext(PropertiesContext);
+  const fetch = useFetch();
+  const toaster = useToaster();
+  const t = useT();
+  const mediaRef = useRef<{ path: string; id: string }[]>([]);
+  const pendingUpload = useRef<Promise<void>>(Promise.resolve());
+  const changeMedia = useCallback(
+    (event: {
+      target: {
+        name: string;
+        value?: { id: string; path: string }[];
+      };
+    }) => {
+      mediaRef.current = event.target.value || [];
+      setMedia(mediaRef.current);
+    },
+    []
+  );
+  const uploadPastedImages = useCallback(
+    (files: File[]) => {
+      pendingUpload.current = pendingUpload.current
+        .then(async () => {
+          const uploaded = await Promise.all(
+            files.map(async (file) => {
+              const body = new FormData();
+              body.append('file', file);
+              const response = await fetch('/media/upload-simple', {
+                method: 'POST',
+                body,
+              });
+              if (!response.ok) {
+                const failure = await response.json().catch(() => ({}));
+                toaster.show(
+                  typeof failure.message === 'string'
+                    ? failure.message
+                    : t('image_upload_failed', 'Could not upload the image.'),
+                  'warning'
+                );
+                return undefined;
+              }
+              const saved = await response.json();
+              return { id: saved.id as string, path: saved.path as string };
+            })
+          );
+          mediaRef.current = [
+            ...mediaRef.current,
+            ...(uploaded.filter(Boolean) as { id: string; path: string }[]),
+          ];
+          setMedia(mediaRef.current);
+        })
+        .catch(() => {
+          toaster.show(
+            t('image_upload_failed', 'Could not upload the image.'),
+            'warning'
+          );
+        });
+      return pendingUpload.current;
+    },
+    [fetch, toaster, t]
+  );
   return (
     <>
-      <MediaPortal
-        value={value}
-        media={media}
-        setMedia={(e) => setMedia(e.target.value)}
-      />
+      <MediaPortal value={value} media={media} setMedia={changeMedia} />
       <Input
         {...props}
         onChange={setValue}
-        onSend={(text) => {
+        onPasteFiles={uploadPastedImages}
+        hasAttachments={media.length > 0}
+        onSend={async (text) => {
+          await pendingUpload.current;
+          const attachments = mediaRef.current;
           const send = props.onSend(
             text +
-              (media.length > 0
+              (attachments.length > 0
                 ? '\n[--Media--]' +
-                  media
+                  attachments
                     .map((m) =>
                       hasExtension(m.path, 'mp4')
                         ? `Video: ${m.path}`
-                        : `Image: ${m.path}`
+                        : `Image: ${m.path} (media ${m.id})`
                     )
                     .join('\n') +
                   '\n[--Media--]'
@@ -249,6 +313,7 @@ Use the following social media platforms: ${JSON.stringify(
 }`
           );
           setValue('');
+          mediaRef.current = [];
           setMedia([]);
           return send;
         }}
