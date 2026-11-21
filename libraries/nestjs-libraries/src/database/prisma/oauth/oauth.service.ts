@@ -313,7 +313,8 @@ export class OAuthService {
       return true;
     }
     try {
-      return !!resource && new URL(resource).pathname.startsWith('/mcp-oauth');
+      const backendPath = new URL(process.env.NEXT_PUBLIC_BACKEND_URL!).pathname.replace(/\/+$/, '');
+      return !!resource && new URL(resource).pathname.startsWith(`${backendPath}/mcp-oauth`);
     } catch {
       return false;
     }

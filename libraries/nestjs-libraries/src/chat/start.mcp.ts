@@ -204,14 +204,15 @@ export const startMcp = async (app: INestApplication) => {
   // metadata from the domain root of the MCP url (no path issuer), connect with
   // a pre-registered client instead of DCR and require the refresh_token
   // grant, so the root is answered only when that client is configured
+  const publicBackendUrl = process.env.NEXT_PUBLIC_BACKEND_URL!.replace(/\/+$/, '');
   const authorizationServers: Record<string, { issuer: string; registration: boolean; refresh: boolean }> = {
     '/mcp-oauth-chatgpt': {
-      issuer: new URL('/mcp-oauth-chatgpt', process.env.NEXT_PUBLIC_BACKEND_URL!).toString(),
+      issuer: `${publicBackendUrl}/mcp-oauth-chatgpt`,
       registration: false,
       refresh: false,
     },
     '/mcp-oauth-dynamic': {
-      issuer: new URL('/mcp-oauth-dynamic', process.env.NEXT_PUBLIC_BACKEND_URL!).toString(),
+      issuer: `${publicBackendUrl}/mcp-oauth-dynamic`,
       registration: true,
       refresh: false,
     },
@@ -253,7 +254,7 @@ export const startMcp = async (app: INestApplication) => {
   const createResourceMiddleware = (mcpPath: string, authorizationServer: string) =>
     createOAuthMiddleware({
       oauth: {
-        resource: new URL(mcpPath, process.env.NEXT_PUBLIC_BACKEND_URL!).toString(),
+        resource: `${publicBackendUrl}${mcpPath}`,
         authorizationServers: [authorizationServers[authorizationServer].issuer],
         scopesSupported: oauthScopes,
         validateToken: async (token: string) => {
