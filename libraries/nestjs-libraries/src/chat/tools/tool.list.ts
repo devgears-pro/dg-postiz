@@ -15,6 +15,7 @@ import { IntegrationConnectTool } from '@gitroom/nestjs-libraries/chat/tools/int
 import { UploadFromUrlTool } from '@gitroom/nestjs-libraries/chat/tools/upload.from.url.tool';
 import { MediaListTool } from '@gitroom/nestjs-libraries/chat/tools/media.list.tool';
 import { MediaStatusTool } from '@gitroom/nestjs-libraries/chat/tools/media.status.tool';
+import { InspectImageTool } from '@gitroom/nestjs-libraries/chat/tools/inspect.image.tool';
 import { PostsListTool } from '@gitroom/nestjs-libraries/chat/tools/posts.list.tool';
 import { PostSettingsTool } from '@gitroom/nestjs-libraries/chat/tools/post.settings.tool';
 import { PostAttachmentsTool } from '@gitroom/nestjs-libraries/chat/tools/post.attachments.tool';
@@ -49,6 +50,7 @@ export const toolList = [
   UploadFromUrlTool,
   MediaListTool,
   MediaStatusTool,
+  InspectImageTool,
   UploadWidgetTool,
   UploadWidgetTicketTool,
   UploadWidgetStatusTool,
