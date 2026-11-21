@@ -8,6 +8,7 @@ import { AgentDefaultsService } from '@gitroom/nestjs-libraries/chat/agent.defau
 import { AgentConnectionsService } from '@gitroom/nestjs-libraries/chat/agent.connections';
 import { AgentObservabilityService } from '@gitroom/nestjs-libraries/chat/agent.observability';
 import { AgentRuntimeService } from '@gitroom/nestjs-libraries/chat/agent.runtime';
+import { AGENT_MESSAGING } from '@gitroom/nestjs-libraries/chat/agent.messaging.token';
 import { AGENT_RUNTIME } from '@gitroom/nestjs-libraries/chat/agent.runtime.token';
 import { AGENT_DEFAULTS } from '@gitroom/nestjs-libraries/chat/agent.defaults.token';
 
@@ -24,6 +25,7 @@ import { AGENT_DEFAULTS } from '@gitroom/nestjs-libraries/chat/agent.defaults.to
     AgentRuntimeService,
     { provide: AGENT_DEFAULTS, useExisting: AgentDefaultsService },
     { provide: AGENT_RUNTIME, useExisting: AgentRuntimeService },
+    { provide: AGENT_MESSAGING, useExisting: MastraService },
     ...toolList,
   ],
   get exports() {
