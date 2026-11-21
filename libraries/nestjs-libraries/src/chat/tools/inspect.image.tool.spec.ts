@@ -12,14 +12,19 @@ const media = (overrides: Record<string, unknown> = {}) => ({
 
 const setup = (
   row: unknown,
-  decision: Record<string, unknown> = { action: 'deliver', runId: 'run-1' }
+  decision: Record<string, unknown> = { action: 'deliver', runId: 'run-1' },
+  threadResource = 'organization-1'
 ) => {
   const sendMessage = vi.fn().mockReturnValue({
     accepted: Promise.resolve(decision),
   });
+  const getThreadById = vi
+    .fn()
+    .mockResolvedValue({ id: 'thread-1', resourceId: threadResource });
+  const getMemory = vi.fn().mockResolvedValue({ getThreadById });
   const messaging = {
     mastra: vi.fn().mockResolvedValue({
-      getAgent: vi.fn().mockReturnValue({ sendMessage }),
+      getAgent: vi.fn().mockReturnValue({ sendMessage, getMemory }),
     }),
   };
   const mediaService = { getMediaStatus: vi.fn().mockResolvedValue(row) };
@@ -69,11 +74,15 @@ describe('image inspection', () => {
           },
           {
             type: 'text',
-            text: 'Image from the media library: media media-1.',
+            text: 'Image from the media library, media id: media-1.',
           },
         ],
       },
-      { resourceId: 'organization-1', threadId: 'thread-1' }
+      {
+        resourceId: 'organization-1',
+        threadId: 'thread-1',
+        ifIdle: { behavior: 'discard' },
+      }
     );
   });
 
@@ -113,5 +122,15 @@ describe('image inspection', () => {
     await expect(
       tool.inspect('organization-1', 'media-1', target)
     ).rejects.toThrow('could not be added to the conversation');
+  });
+
+  it('rejects a thread of another organization', async () => {
+    const { tool, sendMessage } = setup(media(), undefined, 'organization-2');
+    await writeImage();
+
+    await expect(
+      tool.inspect('organization-1', 'media-1', target)
+    ).rejects.toThrow('without an active conversation');
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { HttpException, Inject, Injectable } from '@nestjs/common';
+import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { createTool } from '@mastra/core/tools';
 import { extname, resolve, sep } from 'path';
 import { readFile, stat } from 'fs/promises';
@@ -60,7 +60,7 @@ The image arrives as a user message; answer after it appears. Do not inspect ima
       mcp: {
         annotations: {
           title: 'Inspect Image',
-          readOnlyHint: true,
+          readOnlyHint: false,
           destructiveHint: false,
           idempotentHint: false,
           openWorldHint: false,
@@ -86,6 +86,11 @@ The image arrives as a user message; answer after it appears. Do not inspect ima
             resourceId: (context as any)?.resourceId ?? organization.id,
           });
         } catch (error) {
+          Logger.warn(
+            `inspectImage ${inputData.mediaId}: ${
+              error instanceof Error ? error.message : error
+            }`
+          );
           return {
             error:
               error instanceof InspectionError
@@ -133,7 +138,16 @@ The image arrives as a user message; answer after it appears. Do not inspect ima
     target: Target
   ) {
     const mastra = await this._messaging.mastra();
-    const decision = await mastra.getAgent('postiz').sendMessage(
+    const agent = mastra.getAgent('postiz');
+    const memory = await agent.getMemory();
+    const thread = await memory?.getThreadById({ threadId: target.threadId });
+    if (!thread || thread.resourceId !== target.resourceId) {
+      throw new InspectionError(
+        'The image cannot be added without an active conversation.'
+      );
+    }
+
+    const decision = await agent.sendMessage(
       {
         contents: [
           {
@@ -143,21 +157,18 @@ The image arrives as a user message; answer after it appears. Do not inspect ima
           },
           {
             type: 'text',
-            text: `Image from the media library: media ${mediaId}.`,
+            text: `Image from the media library, media id: ${mediaId}.`,
           },
         ],
       },
       {
         resourceId: target.resourceId,
         threadId: target.threadId,
+        ifIdle: { behavior: 'discard' },
       }
     ).accepted;
 
-    if (decision.action === 'wake') {
-      decision.output.consumeStream().catch(() => undefined);
-    }
-
-    if (decision.action !== 'deliver' && decision.action !== 'wake') {
+    if (decision.action !== 'deliver') {
       throw new InspectionError(
         'The image could not be added to the conversation.'
       );
