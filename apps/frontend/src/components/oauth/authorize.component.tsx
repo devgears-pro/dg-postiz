@@ -24,23 +24,20 @@ export const OAuthAuthorize: FC<{ logged: boolean }> = ({ logged }) => {
   const codeChallenge = searchParams.get('code_challenge');
   const codeChallengeMethod = searchParams.get('code_challenge_method');
   const resource = searchParams.get('resource');
+  const parameterError = !clientId || !responseType
+    ? t(
+        'oauth_missing_parameters',
+        'Missing required parameters (client_id, response_type)'
+      )
+    : responseType !== 'code'
+      ? t(
+          'oauth_unsupported_response_type',
+          'Only response_type=code is supported'
+        )
+      : '';
 
   useEffect(() => {
-    if (!clientId || !responseType) {
-      setError(
-        t(
-          'oauth_missing_parameters',
-          'Missing required parameters (client_id, response_type)'
-        )
-      );
-      setLoading(false);
-      return;
-    }
-    if (responseType !== 'code') {
-      setError(
-        t('oauth_unsupported_response_type', 'Only response_type=code is supported')
-      );
-      setLoading(false);
+    if (parameterError) {
       return;
     }
 

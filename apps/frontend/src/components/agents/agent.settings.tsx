@@ -1,7 +1,8 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FC, useCallback, useState } from 'react';
 import useSWR from 'swr';
+import type { KeyedMutator } from 'swr';
 import type {
   AgentConfigOverrides,
   AgentConfigView,
@@ -51,31 +52,6 @@ export const AgentSettings: FC = () => {
     { revalidateOnFocus: false, shouldRetryOnError: false }
   );
 
-  const [overrides, setOverrides] = useState<AgentConfigOverrides>({});
-  const [secrets, setSecrets] = useState<SecretChanges>({});
-  const [mcpTokens, setMcpTokens] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(
-    null
-  );
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!view) return;
-    setOverrides(view.overrides);
-    setSecrets({});
-    setMcpTokens({});
-    setStatus(null);
-  }, [view?.revision, orgId]);
-
-  const providerValue =
-    overrides.provider?.baseUrl ?? view?.defaults.provider.baseUrl ?? '';
-  const providerOverridden = overrides.provider !== undefined;
-
-  const builtinSelected = useMemo(
-    () => new Set(overrides.builtinTools ?? view?.effective.builtinTools ?? []),
-    [overrides.builtinTools, view?.effective.builtinTools]
-  );
-
   if (!user || !['ADMIN', 'SUPERADMIN'].includes(user.role)) {
     return (
       <div className="p-[24px]">{t('agent_settings_admin_only', 'Only organization administrators can change agent settings.')}</div>
@@ -93,6 +69,39 @@ export const AgentSettings: FC = () => {
       </div>
     );
   }
+
+  return (
+    <AgentSettingsForm
+      key={`${orgId}-${view.revision}`}
+      view={view}
+      t={t}
+      fetch={fetch}
+      mutate={mutate}
+    />
+  );
+};
+
+const AgentSettingsForm: FC<{
+  view: AgentConfigView;
+  t: ReturnType<typeof useT>;
+  fetch: ReturnType<typeof useFetch>;
+  mutate: KeyedMutator<AgentConfigView>;
+}> = ({ view, t, fetch, mutate }) => {
+  const [overrides, setOverrides] = useState<AgentConfigOverrides>(view.overrides);
+  const [secrets, setSecrets] = useState<SecretChanges>({});
+  const [mcpTokens, setMcpTokens] = useState<Record<string, string>>({});
+  const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(
+    null
+  );
+  const [saving, setSaving] = useState(false);
+
+  const providerValue =
+    overrides.provider?.baseUrl ?? view?.defaults.provider.baseUrl ?? '';
+  const providerOverridden = overrides.provider !== undefined;
+
+  const builtinSelected = new Set(
+    overrides.builtinTools ?? view.effective.builtinTools ?? []
+  );
 
   const promptState = promptEditorState(view, overrides);
 

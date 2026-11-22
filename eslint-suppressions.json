@@ -1,0 +1,395 @@
+{
+  "apps/frontend/src/app/(provider)/provider/[p]/bridge.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/auth/after.activate.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/auth/providers/farcaster.provider.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/auth/providers/wallet.provider.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/auth/register.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/billing/embedded.billing.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/frontend/src/components/billing/finish.trial.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/billing/first.billing.component.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    },
+    "react-hooks/static-components": {
+      "count": 2
+    }
+  },
+  "apps/frontend/src/components/billing/main.billing.component.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/frontend/src/components/launches/add.provider.component.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/launches/calendar.context.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/frontend/src/components/launches/calendar.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/launches/comments/comment.component.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/launches/customer.modal.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/launches/helpers/pick.platform.component.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    },
+    "react-hooks/preserve-manual-memoization": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/launches/helpers/use.move.to.integration.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    },
+    "react-hooks/use-memo": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/launches/menu/menu.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/launches/web3/providers/telegram.provider.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/layout/check.payment.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/layout/streak.component.tsx": {
+    "react-hooks/preserve-manual-memoization": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/media/media.component.tsx": {
+    "react-hooks/immutability": {
+      "count": 2
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/media/new.uploader.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/delay.component.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/editor.tsx": {
+    "react-hooks/refs": {
+      "count": 13
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/frontend/src/components/new-launch/mention.component.tsx": {
+    "react-hooks/refs": {
+      "count": 14
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/devto/devto.tags.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/devto/select.organization.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/discord/discord.channel.select.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/dribbble/dribbble.teams.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/hashnode/hashnode.publications.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/hashnode/hashnode.tags.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    },
+    "react-hooks/use-memo": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/instagram/instagram.audio.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/instagram/instagram.tags.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/listmonk/select.list.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/listmonk/select.templates.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/medium/medium.publications.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/medium/medium.tags.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/mewe/mewe.group.select.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/pinterest/pinterest.board.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/skool/skool.group.select.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/skool/skool.label.select.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/slack/slack.channel.select.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/tiktok/tiktok.location.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/tiktok/tiktok.music.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/whop/whop.company.select.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/whop/whop.experience.select.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/wordpress/wordpress.post.type.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-launch/providers/wordpress/wordpress.terms.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-layout/layout.component.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-layout/mobile.integration.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/new-layout/sentry.feedback.component.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/plugs/plug.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/preview/comments.components.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/settings/email-notifications.component.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/settings/github.component.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/settings/shortlink-preference.component.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/frontend/src/components/settings/signatures.component.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "apps/frontend/tailwind.config.cjs": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 3
+    }
+  },
+  "libraries/helpers/src/decorators/plug.decorator.ts": {
+    "@typescript-eslint/no-wrapper-object-types": {
+      "count": 1
+    }
+  },
+  "libraries/helpers/src/decorators/post.plug.ts": {
+    "@typescript-eslint/no-wrapper-object-types": {
+      "count": 1
+    }
+  },
+  "libraries/helpers/src/utils/custom.fetch.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "libraries/helpers/src/utils/use.wait.for.class.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "libraries/nestjs-libraries/src/upload/cloudflare.storage.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    }
+  },
+  "libraries/nestjs-libraries/src/upload/custom.upload.validation.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    }
+  },
+  "libraries/nestjs-libraries/src/upload/local.storage.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    }
+  },
+  "libraries/nestjs-libraries/src/upload/r2.uploader.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    }
+  },
+  "libraries/react-shared-libraries/src/form/canonical.tsx": {
+    "react-hooks/use-memo": {
+      "count": 1
+    }
+  },
+  "libraries/react-shared-libraries/src/form/input.tsx": {
+    "react-hooks/use-memo": {
+      "count": 1
+    }
+  },
+  "libraries/react-shared-libraries/src/form/multi.select.tsx": {
+    "react-hooks/use-memo": {
+      "count": 1
+    }
+  },
+  "libraries/react-shared-libraries/src/form/textarea.tsx": {
+    "react-hooks/use-memo": {
+      "count": 1
+    }
+  },
+  "libraries/react-shared-libraries/src/helpers/image.with.fallback.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "libraries/react-shared-libraries/src/helpers/use.is.visible.tsx": {
+    "react-hooks/rules-of-hooks": {
+      "count": 2
+    }
+  }
+}
