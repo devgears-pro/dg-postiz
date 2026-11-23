@@ -242,7 +242,7 @@ export class AgentConfigService {
     organizationId: string,
     skill: SkillDefinition
   ): Promise<SkillDefinition> {
-    const parsedSkill = skillDefinitionSchema.parse(skill);
+    const parsedSkill = skillDefinitionSchema.parse(skill) as SkillDefinition;
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const [defaults, record] = await Promise.all([
