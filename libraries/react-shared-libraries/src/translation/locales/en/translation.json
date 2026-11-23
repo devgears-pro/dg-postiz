@@ -938,6 +938,7 @@
   "label_made_with_ai": "Made with AI",
   "facebook_made_with_ai": "Made with AI (only for text and photo posts)",
   "youtube_made_with_ai": "Made with AI (realistic altered or synthetic content)",
+<<<<<<< HEAD
   "agent_settings_title": "Agent settings",
   "agent_settings_scope": "These settings belong to this organization. Empty fields inherit the shared deployment defaults.",
   "agent_settings_admin_only": "Only organization administrators can change agent settings.",
@@ -985,5 +986,8 @@
   "agent_mcp_failed": "The MCP server did not answer.",
   "agent_secret_keep": "••••••• saved, leave empty to keep",
   "agent_prompt_edited": "Edited",
-  "agent_prompt_reset": "Reset"
+  "agent_prompt_reset": "Reset",
+  "back_to_postiz": "Back to Postiz",
+  "not_selectable_page_not_granted_to_postiz": "Not selectable: page not granted to Postiz",
+  "you_did_not_grant_postiz_access_to_this_page": "You did not grant Postiz access to this Page in the Facebook dialog.\nReconnect the channel, click Edit settings on the Facebook screen, choose to opt in to current Pages only, and tick this Page together with your other connected Pages."
 }
