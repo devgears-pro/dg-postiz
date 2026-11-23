@@ -81,4 +81,60 @@ export class AgentConfigRepository {
 
     return this.find(organizationId);
   }
+
+  async getMemory(organizationId: string): Promise<string[]> {
+    const prisma = this._config.model as any;
+    const record = await prisma.mastra_resources.findUnique({
+      where: { id: organizationId },
+      select: { workingMemory: true },
+    });
+    if (!record?.workingMemory) return [];
+    try {
+      const parsed = JSON.parse(record.workingMemory);
+      return Array.isArray(parsed?.proverbs) ? parsed.proverbs : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async updateMemory(
+    organizationId: string,
+    proverbs: string[]
+  ): Promise<string[]> {
+    const prisma = this._config.model as any;
+    const workingMemory = JSON.stringify({ proverbs });
+    const now = new Date();
+    await prisma.mastra_resources.upsert({
+      where: { id: organizationId },
+      create: {
+        id: organizationId,
+        workingMemory,
+        createdAt: now,
+        updatedAt: now,
+      },
+      update: {
+        workingMemory,
+        updatedAt: now,
+      },
+    });
+    return proverbs;
+  }
+
+  async clearMemory(organizationId: string): Promise<void> {
+    const prisma = this._config.model as any;
+    const now = new Date();
+    await prisma.mastra_resources.upsert({
+      where: { id: organizationId },
+      create: {
+        id: organizationId,
+        workingMemory: JSON.stringify({ proverbs: [] }),
+        createdAt: now,
+        updatedAt: now,
+      },
+      update: {
+        workingMemory: JSON.stringify({ proverbs: [] }),
+        updatedAt: now,
+      },
+    });
+  }
 }

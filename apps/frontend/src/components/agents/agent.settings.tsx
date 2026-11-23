@@ -24,6 +24,7 @@ import {
   type AgentSettingsSection,
 } from '@gitroom/frontend/components/agents/agent.settings.sections';
 import { AgentSkillsSettings } from '@gitroom/frontend/components/agents/agent.skills.settings';
+import { AgentMemorySettings } from '@gitroom/frontend/components/agents/agent.memory.settings';
 import { AgentMcpSettings } from '@gitroom/frontend/components/agents/agent.mcp.settings';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 
@@ -380,6 +381,8 @@ const AgentSettingsForm: FC<{
           </button>
         </div>
       </section>
+
+      <AgentMemorySettings />
 
       <section className="flex flex-col gap-[8px]">
         <h3 className="text-[18px] font-[500]" data-agent-section="tools">

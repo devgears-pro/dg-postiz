@@ -297,6 +297,18 @@ export const resetAgentConfigSchema = z
   })
   .strict();
 
+export const updateAgentMemorySchema = z
+  .object({
+    proverbs: z.array(z.string().min(1).max(4096)).max(200),
+  })
+  .strict();
+
+export type AgentMemoryView = {
+  proverbs: string[];
+};
+
+export type UpdateAgentMemoryInput = z.infer<typeof updateAgentMemorySchema>;
+
 export const providerTestInputSchema = z
   .object({
     expectedRevision: z.number().int().min(0),

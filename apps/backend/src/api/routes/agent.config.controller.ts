@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   Post,
   Put,
@@ -16,6 +17,7 @@ import {
   mcpTestInputSchema,
   providerTestInputSchema,
   resetAgentConfigSchema,
+  updateAgentMemorySchema,
   type AgentConfigWriteRequest,
   type McpTestInput,
   type ProviderTestInput,
@@ -86,6 +88,38 @@ export class AgentConfigController {
       user?.id ?? null,
       parsed.data.expectedRevision
     );
+  }
+
+  @Get('/memory')
+  getMemory(@GetOrgFromRequest() organization: Organization) {
+    return this._agentConfigService.getMemory(organization.id);
+  }
+
+  @Put('/memory')
+  async updateMemory(
+    @GetOrgFromRequest() organization: Organization,
+    @Body() body: unknown
+  ) {
+    const parsed = updateAgentMemorySchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: 'Invalid agent memory update request',
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+      });
+    }
+
+    return this._agentConfigService.updateMemory(
+      organization.id,
+      parsed.data.proverbs
+    );
+  }
+
+  @Delete('/memory')
+  clearMemory(@GetOrgFromRequest() organization: Organization) {
+    return this._agentConfigService.clearMemory(organization.id);
   }
 
   @Post('/test-provider')

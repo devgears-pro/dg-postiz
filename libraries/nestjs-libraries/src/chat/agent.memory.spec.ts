@@ -1,0 +1,150 @@
+import { describe, expect, it, vi } from 'vitest';
+import { AgentConfigService } from './agent.config.service';
+import type {
+  AgentConfigOverrides,
+  SystemAgentDefaults,
+} from '@gitroom/helpers/agent/agent.config.schema';
+import type { AgentConfigRecord } from '../database/prisma/agent-config/agent.config.repository';
+
+const mockDefaults: SystemAgentDefaults = {
+  prompt: 'Default system prompt',
+  model: 'gpt-5.2',
+  titleModel: 'gpt-5.2',
+  providerBaseUrl: 'https://api.openai.com/v1',
+  builtinTools: ['postsListTool'],
+  allowedBuiltinTools: ['postsListTool'],
+  skills: {
+    'dg-marketing': {
+      name: 'dg-marketing',
+      description: 'Marketing practice for a business',
+      instructions: 'Marketing instructions',
+    },
+  },
+  mcpServers: {},
+  generation: {},
+  langfuse: {
+    enabled: false,
+    allowedBaseUrls: [],
+    captureContent: false,
+  },
+  sources: { skills: 'file' },
+  defaultsVersion: 'test-version',
+};
+
+const createMockRepo = () => {
+  const configStore = new Map<string, AgentConfigRecord>();
+  const memoryStore = new Map<string, string[]>();
+
+  return {
+    find: vi.fn(async (orgId: string) => configStore.get(orgId) ?? null),
+    create: vi.fn(async (input: { organizationId: string; overrides: AgentConfigOverrides }) => {
+      const record: AgentConfigRecord = {
+        organizationId: input.organizationId,
+        schemaVersion: 1,
+        revision: 1,
+        overrides: input.overrides,
+        encryptedSecrets: null,
+        secretSummary: null,
+        updatedById: null,
+      };
+      configStore.set(input.organizationId, record);
+      return record;
+    }),
+    update: vi.fn(async (orgId: string, revision: number, input: { overrides: AgentConfigOverrides }) => {
+      const existing = configStore.get(orgId);
+      const record: AgentConfigRecord = {
+        organizationId: orgId,
+        schemaVersion: 1,
+        revision: (existing?.revision ?? revision) + 1,
+        overrides: input.overrides,
+        encryptedSecrets: null,
+        secretSummary: null,
+        updatedById: null,
+      };
+      configStore.set(orgId, record);
+      return record;
+    }),
+    getMemory: vi.fn(async (orgId: string) => memoryStore.get(orgId) ?? []),
+    updateMemory: vi.fn(async (orgId: string, proverbs: string[]) => {
+      memoryStore.set(orgId, proverbs);
+      return proverbs;
+    }),
+    clearMemory: vi.fn(async (orgId: string) => {
+      memoryStore.set(orgId, []);
+    }),
+    _configStore: configStore,
+    _memoryStore: memoryStore,
+  };
+};
+
+describe('Agent Working Memory Management', () => {
+  const setup = () => {
+    const repo = createMockRepo();
+    const defaultsProvider = { get: async () => mockDefaults };
+    const service = new AgentConfigService(repo as any, defaultsProvider as any);
+    return { repo, service };
+  };
+
+  it('returns empty proverbs when no memory exists', async () => {
+    const { service } = setup();
+    const res = await service.getMemory('org-1');
+    expect(res).toEqual({ proverbs: [] });
+  });
+
+  it('updates and retrieves working memory facts', async () => {
+    const { service } = setup();
+    const facts = [
+      'Always communicate in Ukrainian',
+      'Brand tone: professional and direct',
+    ];
+
+    const updated = await service.updateMemory('org-1', facts);
+    expect(updated).toEqual({ proverbs: facts });
+
+    const retrieved = await service.getMemory('org-1');
+    expect(retrieved).toEqual({ proverbs: facts });
+  });
+
+  it('clears working memory', async () => {
+    const { service } = setup();
+    await service.updateMemory('org-1', ['Rule to delete']);
+
+    const cleared = await service.clearMemory('org-1');
+    expect(cleared).toEqual({ proverbs: [] });
+
+    const retrieved = await service.getMemory('org-1');
+    expect(retrieved).toEqual({ proverbs: [] });
+  });
+
+  it('clears working memory on agent config reset', async () => {
+    const { service, repo } = setup();
+    const orgId = 'org-1';
+
+    // Set custom override and memory
+    await repo.create({
+      organizationId: orgId,
+      overrides: { systemPrompt: 'Old custom prompt with persona' },
+    });
+    await service.updateMemory(orgId, ['Old persona rule: horse greeting']);
+
+    // Reset config to shared defaults
+    await service.reset(orgId, 'user-1', 1);
+
+    // Verify config is reset to empty overrides
+    const config = await service.resolve(orgId);
+    expect(config.config.prompt).toBe(mockDefaults.prompt);
+
+    // Verify working memory was cleared
+    const memory = await service.getMemory(orgId);
+    expect(memory).toEqual({ proverbs: [] });
+  });
+
+  it('enforces multi-tenant isolation for memory', async () => {
+    const { service } = setup();
+    await service.updateMemory('org-a', ['Fact for A']);
+    await service.updateMemory('org-b', ['Fact for B']);
+
+    expect(await service.getMemory('org-a')).toEqual({ proverbs: ['Fact for A'] });
+    expect(await service.getMemory('org-b')).toEqual({ proverbs: ['Fact for B'] });
+  });
+});

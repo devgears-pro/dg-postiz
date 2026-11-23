@@ -14,6 +14,7 @@ import {
   type AgentConfigOverrides,
   type AgentConfigView,
   type AgentConfigWriteRequest,
+  type AgentMemoryView,
   type CredentialStatus,
   type ResolvedAgentConfig,
   type SecretChanges,
@@ -235,6 +236,8 @@ export class AgentConfigService {
       ? await this._repository.update(organizationId, revision, write)
       : await this._repository.create({ organizationId, ...write });
 
+    await this._repository.clearMemory(organizationId);
+
     return this.buildView(defaults, saved);
   }
 
@@ -357,6 +360,24 @@ export class AgentConfigService {
       references: skill.references,
       source: skill.source === 'organization' ? ('organization' as const) : ('system' as const),
     }));
+  }
+
+  async getMemory(organizationId: string): Promise<AgentMemoryView> {
+    const proverbs = await this._repository.getMemory(organizationId);
+    return { proverbs };
+  }
+
+  async updateMemory(
+    organizationId: string,
+    proverbs: string[]
+  ): Promise<AgentMemoryView> {
+    const updated = await this._repository.updateMemory(organizationId, proverbs);
+    return { proverbs: updated };
+  }
+
+  async clearMemory(organizationId: string): Promise<AgentMemoryView> {
+    await this._repository.clearMemory(organizationId);
+    return { proverbs: [] };
   }
 
   private applyRuntimeCredentials(
