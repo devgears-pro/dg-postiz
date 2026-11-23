@@ -25,8 +25,14 @@ import { PostAnalyticsTool } from '@gitroom/nestjs-libraries/chat/tools/post.ana
 import { UploadWidgetTool } from '@gitroom/nestjs-libraries/chat/tools/upload.widget.tool';
 import { UploadWidgetTicketTool } from '@gitroom/nestjs-libraries/chat/tools/upload.widget.ticket.tool';
 import { UploadWidgetStatusTool } from '@gitroom/nestjs-libraries/chat/tools/upload.widget.status.tool';
+import { SkillSaveTool } from '@gitroom/nestjs-libraries/chat/tools/skill.save.tool';
+import { SkillRemoveTool } from '@gitroom/nestjs-libraries/chat/tools/skill.remove.tool';
+import { SkillsListTool } from '@gitroom/nestjs-libraries/chat/tools/skills.list.tool';
 
 export const toolList = [
+  SkillSaveTool,
+  SkillRemoveTool,
+  SkillsListTool,
   IntegrationListTool,
   GroupListTool,
   IntegrationConnectTool,
