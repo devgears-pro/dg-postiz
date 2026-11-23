@@ -8,6 +8,7 @@ import {
 import {
   agentConfigOverridesSchema,
   resolveAgentConfig,
+  skillDefinitionSchema,
   toAgentConfigView,
   validateOverrides,
   type AgentConfigOverrides,
@@ -16,6 +17,7 @@ import {
   type CredentialStatus,
   type ResolvedAgentConfig,
   type SecretChanges,
+  type SkillDefinition,
   type SystemAgentDefaults,
 } from '@gitroom/helpers/agent/agent.config.schema';
 import {
@@ -234,6 +236,127 @@ export class AgentConfigService {
       : await this._repository.create({ organizationId, ...write });
 
     return this.buildView(defaults, saved);
+  }
+
+  async saveSkill(
+    organizationId: string,
+    skill: SkillDefinition
+  ): Promise<SkillDefinition> {
+    const parsedSkill = skillDefinitionSchema.parse(skill);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const [defaults, record] = await Promise.all([
+        this._defaults.get(),
+        this._repository.find(organizationId),
+      ]);
+
+      if (parsedSkill.name in defaults.skills) {
+        throw new BadRequestException('Cannot modify system skills');
+      }
+
+      const currentOverrides = readOverrides(record);
+      const nextOverrides: AgentConfigOverrides = {
+        ...currentOverrides,
+        skills: {
+          ...(currentOverrides.skills ?? {}),
+          [parsedSkill.name]: parsedSkill,
+        },
+      };
+
+      const issues = validateOverrides(defaults, nextOverrides);
+      if (issues.length) {
+        throw new BadRequestException({ message: 'Invalid agent configuration', issues });
+      }
+
+      try {
+        if (record) {
+          await this._repository.update(organizationId, record.revision, {
+            overrides: nextOverrides,
+            encryptedSecrets: record.encryptedSecrets,
+            secretSummary: record.secretSummary ?? emptySummary(),
+            updatedById: null,
+          });
+        } else {
+          await this._repository.create({
+            organizationId,
+            overrides: nextOverrides,
+            encryptedSecrets: null,
+            secretSummary: emptySummary(),
+            updatedById: null,
+          });
+        }
+        return parsedSkill;
+      } catch (err) {
+        if (err instanceof ConflictException && attempt < 2) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    return parsedSkill;
+  }
+
+  async removeSkill(organizationId: string, name: string): Promise<void> {
+    if (!name || typeof name !== 'string') {
+      throw new BadRequestException('Skill name is required');
+    }
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const [defaults, record] = await Promise.all([
+        this._defaults.get(),
+        this._repository.find(organizationId),
+      ]);
+
+      if (name in defaults.skills) {
+        throw new BadRequestException('Cannot remove system skills');
+      }
+
+      if (!record) {
+        return;
+      }
+
+      const currentOverrides = readOverrides(record);
+      if (!currentOverrides.skills || !(name in currentOverrides.skills)) {
+        return;
+      }
+
+      const nextSkills = { ...currentOverrides.skills };
+      delete nextSkills[name];
+
+      const nextOverrides: AgentConfigOverrides = {
+        ...currentOverrides,
+        skills: Object.keys(nextSkills).length > 0 ? nextSkills : undefined,
+      };
+
+      try {
+        await this._repository.update(organizationId, record.revision, {
+          overrides: nextOverrides,
+          encryptedSecrets: record.encryptedSecrets,
+          secretSummary: record.secretSummary ?? emptySummary(),
+          updatedById: null,
+        });
+        return;
+      } catch (err) {
+        if (err instanceof ConflictException && attempt < 2) {
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  async listSkills(
+    organizationId: string
+  ): Promise<Array<SkillDefinition & { source: 'system' | 'organization' }>> {
+    const { config } = await this.resolve(organizationId);
+    return config.skills.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      instructions: skill.instructions,
+      references: skill.references,
+      source: skill.source === 'organization' ? ('organization' as const) : ('system' as const),
+    }));
   }
 
   private applyRuntimeCredentials(
