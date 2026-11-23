@@ -36,7 +36,10 @@ export async function proxy(request: NextRequest) {
   });
 
   if (lng) {
-    topResponse.headers.set(cookieName, lng);
+    topResponse.cookies.set(cookieName, lng, {
+      path: '/',
+      sameSite: 'lax',
+    });
   }
 
   if (nextUrl.pathname.startsWith('/modal/') && !authCookie) {
@@ -108,9 +111,16 @@ export async function proxy(request: NextRequest) {
             : 'github'
           : findIndex
         ).toUpperCase()}`;
-    return NextResponse.redirect(
+    const redirectResponse = NextResponse.redirect(
       new URL(`/auth${url}${additional}`, nextUrl.href)
     );
+    if (lng) {
+      redirectResponse.cookies.set(cookieName, lng, {
+        path: '/',
+        sameSite: 'lax',
+      });
+    }
+    return redirectResponse;
   }
 
   // If the url is /auth and the cookie exists, redirect to /
