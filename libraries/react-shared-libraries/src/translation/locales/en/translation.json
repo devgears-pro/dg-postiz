@@ -938,7 +938,6 @@
   "label_made_with_ai": "Made with AI",
   "facebook_made_with_ai": "Made with AI (only for text and photo posts)",
   "youtube_made_with_ai": "Made with AI (realistic altered or synthetic content)",
-<<<<<<< HEAD
   "agent_settings_title": "Agent settings",
   "agent_settings_scope": "These settings belong to this organization. Empty fields inherit the shared deployment defaults.",
   "agent_settings_admin_only": "Only organization administrators can change agent settings.",
