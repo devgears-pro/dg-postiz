@@ -15,6 +15,7 @@ import { InstagramProvider } from '@gitroom/nestjs-libraries/integrations/social
 import { META_GRAPH_API_VERSION } from '@gitroom/nestjs-libraries/integrations/social/facebook.provider';
 import { Integration } from '@prisma/client';
 import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorator';
+import { Tool } from '@gitroom/nestjs-libraries/integrations/tool.decorator';
 
 const instagramProvider = new InstagramProvider();
 
@@ -303,5 +304,353 @@ export class InstagramStandaloneProvider
       date,
       'graph.instagram.com'
     );
+  }
+
+  @Tool({
+    description:
+      'Fetch recent published posts with captions from the Instagram account',
+    dataSchema: [
+      {
+        key: 'limit',
+        type: 'string',
+        description: 'Number of posts to fetch (default 20, max 50)',
+      },
+    ],
+  })
+  async getRecentPosts(
+    token: string,
+    data: { limit?: string },
+    internalId?: string
+  ) {
+    if (!internalId) {
+      throw new Error('Instagram account internalId is required');
+    }
+    const limit = Math.min(Math.max(Number(data?.limit) || 20, 1), 50);
+    const response = await (
+      await this.fetch(
+        `https://graph.instagram.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(internalId)}/media?fields=id,caption,media_type,timestamp,permalink&limit=${limit}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+        this.identifier
+      )
+    ).json();
+
+    return (response?.data || []).map((post: any) => ({
+      id: post.id,
+      caption: post.caption || '',
+      mediaType: post.media_type,
+      timestamp: post.timestamp,
+      permalink: post.permalink,
+    }));
+  }
+
+  @Tool({
+    description:
+      'Fetch detailed information and reaction counts for a specific Instagram post',
+    dataSchema: [
+      {
+        key: 'postId',
+        type: 'string',
+        description: 'ID of the Instagram post',
+      },
+    ],
+  })
+  async getPostDetails(token: string, data: { postId: string }) {
+    if (!data?.postId) {
+      throw new Error('postId is required');
+    }
+    const response = await (
+      await this.fetch(
+        `https://graph.instagram.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(data.postId)}?fields=id,caption,media_type,timestamp,permalink,like_count,comments_count`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+        this.identifier
+      )
+    ).json();
+
+    return {
+      id: response.id,
+      caption: response.caption || '',
+      mediaType: response.media_type,
+      timestamp: response.timestamp,
+      permalink: response.permalink,
+      likeCount: response.like_count ?? 0,
+      commentsCount: response.comments_count ?? 0,
+    };
+  }
+
+  @Tool({
+    description: 'Delete a published post from the Instagram account',
+    dataSchema: [
+      {
+        key: 'postId',
+        type: 'string',
+        description: 'ID of the Instagram post to delete',
+      },
+    ],
+  })
+  async deletePost(token: string, data: { postId: string }) {
+    if (!data?.postId) {
+      throw new Error('postId is required');
+    }
+    const response = await (
+      await this.fetch(
+        `https://graph.instagram.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(data.postId)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        },
+        this.identifier
+      )
+    ).json();
+
+    if (response?.error || response?.success === false) {
+      throw new Error(
+        response?.error?.message || 'Failed to delete Instagram post'
+      );
+    }
+
+    return { success: true, id: data.postId };
+  }
+
+  @Tool({
+    description: 'Fetch comments and nested replies for an Instagram post',
+    dataSchema: [
+      {
+        key: 'postId',
+        type: 'string',
+        description: 'ID of the Instagram post',
+      },
+    ],
+  })
+  async getPostComments(token: string, data: { postId: string }) {
+    if (!data?.postId) {
+      throw new Error('postId is required');
+    }
+    const response = await (
+      await this.fetch(
+        `https://graph.instagram.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(data.postId)}/comments?fields=id,text,timestamp,username,like_count,hidden,replies{id,text,timestamp,username,like_count,hidden}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+        this.identifier
+      )
+    ).json();
+
+    return (response?.data || []).map((comment: any) => ({
+      id: comment.id,
+      text: comment.text || '',
+      timestamp: comment.timestamp,
+      username: comment.username,
+      likeCount: comment.like_count ?? 0,
+      hidden: comment.hidden ?? false,
+      replies: (comment.replies?.data || []).map((reply: any) => ({
+        id: reply.id,
+        text: reply.text || '',
+        timestamp: reply.timestamp,
+        username: reply.username,
+        likeCount: reply.like_count ?? 0,
+        hidden: reply.hidden ?? false,
+      })),
+    }));
+  }
+
+  @Tool({
+    description: 'Reply to a comment on an Instagram post',
+    dataSchema: [
+      {
+        key: 'commentId',
+        type: 'string',
+        description: 'ID of the comment to reply to',
+      },
+      {
+        key: 'message',
+        type: 'string',
+        description: 'Text of the reply',
+      },
+    ],
+  })
+  async replyComment(
+    token: string,
+    data: { commentId: string; message: string }
+  ) {
+    if (!data?.commentId || !data?.message) {
+      throw new Error('commentId and message are required');
+    }
+    const body = new URLSearchParams();
+    body.append('message', data.message);
+
+    const response = await (
+      await this.fetch(
+        `https://graph.instagram.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(data.commentId)}/replies`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body,
+        },
+        this.identifier
+      )
+    ).json();
+
+    if (!response?.id) {
+      throw new Error(
+        response?.error?.message || 'Failed to reply to comment'
+      );
+    }
+
+    return { success: true, id: response.id };
+  }
+
+  @Tool({
+    description: 'Hide or unhide a comment on an Instagram post',
+    dataSchema: [
+      {
+        key: 'commentId',
+        type: 'string',
+        description: 'ID of the comment',
+      },
+      {
+        key: 'hide',
+        type: 'string',
+        description: 'Set to "true" to hide, or "false" to unhide',
+      },
+    ],
+  })
+  async hideComment(token: string, data: { commentId: string; hide: string }) {
+    if (!data?.commentId) {
+      throw new Error('commentId is required');
+    }
+    const hide = String(data?.hide).toLowerCase() === 'true';
+    const body = new URLSearchParams();
+    body.append('hide', String(hide));
+
+    const response = await (
+      await this.fetch(
+        `https://graph.instagram.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(data.commentId)}`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body,
+        },
+        this.identifier
+      )
+    ).json();
+
+    if (response?.error || response?.success === false) {
+      throw new Error(
+        response?.error?.message || 'Failed to update comment visibility'
+      );
+    }
+
+    return {
+      success: true,
+      id: data.commentId,
+      hidden: hide,
+    };
+  }
+
+  @Tool({
+    description: 'Delete a comment from an Instagram post',
+    dataSchema: [
+      {
+        key: 'commentId',
+        type: 'string',
+        description: 'ID of the comment to delete',
+      },
+    ],
+  })
+  async deleteComment(token: string, data: { commentId: string }) {
+    if (!data?.commentId) {
+      throw new Error('commentId is required');
+    }
+    const response = await (
+      await this.fetch(
+        `https://graph.instagram.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(data.commentId)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        },
+        this.identifier
+      )
+    ).json();
+
+    if (response?.error || response?.success === false) {
+      throw new Error(
+        response?.error?.message || 'Failed to delete comment'
+      );
+    }
+
+    return { success: true, id: data.commentId };
+  }
+
+  @Tool({
+    description:
+      'Fetch profile insights (reach, views, follower count) for the Instagram account',
+    dataSchema: [
+      {
+        key: 'metric',
+        type: 'string',
+        description:
+          'Comma-separated metrics, e.g. "reach,views" (defaults to "reach,views")',
+      },
+      {
+        key: 'period',
+        type: 'string',
+        description:
+          'Time period for metrics, e.g. "day", "week", "days_28" (defaults to "day")',
+      },
+    ],
+  })
+  async getAccountInsights(
+    token: string,
+    data: { metric?: string; period?: string },
+    internalId?: string
+  ) {
+    if (!internalId) {
+      throw new Error('Instagram account internalId is required');
+    }
+    const metric = encodeURIComponent(data?.metric || 'reach,views');
+    const period = encodeURIComponent(data?.period || 'day');
+    const response = await (
+      await this.fetch(
+        `https://graph.instagram.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(internalId)}/insights?metric=${metric}&period=${period}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+        this.identifier
+      )
+    ).json();
+
+    return response?.data || [];
+  }
+
+  @Tool({
+    description:
+      'Fetch engagement and reach metrics (views, reach, saved, likes, comments, shares) for a specific Instagram post',
+    dataSchema: [
+      {
+        key: 'postId',
+        type: 'string',
+        description: 'ID of the Instagram post',
+      },
+    ],
+  })
+  async getMediaInsights(token: string, data: { postId: string }) {
+    if (!data?.postId) {
+      throw new Error('postId is required');
+    }
+    const response = await (
+      await this.fetch(
+        `https://graph.instagram.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(data.postId)}/insights?metric=views,reach,saved,likes,comments,shares`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+        this.identifier
+      )
+    ).json();
+
+    return response?.data || [];
   }
 }
