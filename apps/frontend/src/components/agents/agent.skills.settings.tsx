@@ -41,6 +41,7 @@ export const AgentSkillsSettings: FC<{
       {skills.map((skill) => (
         <div
           key={skill.name}
+          data-skill={skill.name}
           className="flex flex-col gap-[6px] border border-newTableBorder rounded-[8px] p-[12px]"
         >
           <div className="flex items-center gap-[8px] flex-wrap">
