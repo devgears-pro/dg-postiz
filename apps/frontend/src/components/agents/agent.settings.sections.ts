@@ -1,5 +1,4 @@
 export const AGENT_SETTINGS_SECTIONS = [
-  'prompt',
   'model',
   'memory',
   'tools',
@@ -10,7 +9,6 @@ export const AGENT_SETTINGS_SECTIONS = [
 export type AgentSettingsSection = (typeof AGENT_SETTINGS_SECTIONS)[number];
 
 const titles: Record<AgentSettingsSection, [string, string]> = {
-  prompt: ['agent_prompt_title', 'System prompt'],
   model: ['agent_model_title', 'Model and provider'],
   memory: ['agent_memory_title', 'Working memory'],
   tools: ['agent_tools_title', 'Built-in tools'],

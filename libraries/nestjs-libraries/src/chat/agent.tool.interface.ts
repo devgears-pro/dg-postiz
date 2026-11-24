@@ -1,6 +1,6 @@
 import type { ToolAction } from '@mastra/core/tools';
 
-export type ToolReturn = ToolAction<any, any, any, any, any, any>;
+export type ToolReturn = ToolAction<unknown, unknown>;
 
 export interface AgentToolInterface {
   name: string;

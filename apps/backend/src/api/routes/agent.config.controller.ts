@@ -4,7 +4,6 @@ import {
   ConflictException,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   Post,
   Put,
@@ -21,7 +20,6 @@ import {
   updateAgentMemorySchema,
   type AgentConfigOverrides,
   type AgentConfigView,
-  type AgentConfigWriteRequest,
   type McpTestInput,
   type ProviderTestInput,
 } from '@gitroom/helpers/agent/agent.config.schema';
@@ -41,33 +39,8 @@ export class AgentConfigController {
   ) {}
 
   @Get('/')
-  async get(
-    @GetOrgFromRequest() organization: Organization,
-    @GetUserFromRequest() user: User
-  ): Promise<AgentConfigView> {
-    const view = await this._agentConfigService.getView(organization.id);
-    if (!user?.isSuperAdmin) {
-      return {
-        ...view,
-        defaults: {
-          ...view.defaults,
-          prompt: '',
-        },
-        effective: {
-          ...view.effective,
-          prompt: '',
-        },
-        overrides: {
-          ...view.overrides,
-          systemPrompt: undefined,
-        },
-        sources: {
-          ...view.sources,
-          prompt: 'hidden',
-        },
-      };
-    }
-    return view;
+  get(@GetOrgFromRequest() organization: Organization): Promise<AgentConfigView> {
+    return this._agentConfigService.getView(organization.id);
   }
 
   @Put('/')
@@ -87,23 +60,11 @@ export class AgentConfigController {
       });
     }
 
-    if (!user?.isSuperAdmin && parsed.data.overrides?.systemPrompt !== undefined) {
-      throw new ForbiddenException(
-        'Only system superadministrators can change the system prompt'
-      );
-    }
-
-    const writeData: AgentConfigWriteRequest = {
-      expectedRevision: parsed.data.expectedRevision ?? 0,
+    return this._agentConfigService.save(organization.id, user?.id ?? null, {
+      expectedRevision: parsed.data.expectedRevision,
       overrides: parsed.data.overrides as AgentConfigOverrides,
       secrets: parsed.data.secrets,
-    };
-
-    return this._agentConfigService.save(
-      organization.id,
-      user?.id ?? null,
-      writeData
-    );
+    });
   }
 
   @Post('/reset')

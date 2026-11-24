@@ -9,6 +9,7 @@ import { AgentConfigService } from '@gitroom/nestjs-libraries/chat/agent.config.
 export class SkillsListTool implements AgentToolInterface {
   constructor(private _agentConfigService: AgentConfigService) {}
   name = 'skillsListTool';
+  optionalOnSelfHosted = true;
 
   run() {
     return createTool({

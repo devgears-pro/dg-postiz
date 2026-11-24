@@ -145,21 +145,17 @@ describe('Agent Working Memory Management', () => {
     const { service, repo } = setup();
     const orgId = 'org-1';
 
-    // Set custom override and memory
     await repo.create({
       organizationId: orgId,
-      overrides: { systemPrompt: 'Old custom prompt with persona' },
+      overrides: { model: 'org-model' },
     });
     await service.updateMemory(orgId, ['Old persona rule: horse greeting']);
 
-    // Reset config to shared defaults
     await service.reset(orgId, 'user-1', 1);
 
-    // Verify config is reset to empty overrides
     const config = await service.resolve(orgId);
-    expect(config.config.prompt).toBe(mockDefaults.prompt);
+    expect(config.config.model).toBe(mockDefaults.model);
 
-    // Verify working memory was cleared
     const memory = await service.getMemory(orgId);
     expect(memory).toEqual({ proverbs: [] });
   });

@@ -13,9 +13,6 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useUser } from '@gitroom/frontend/components/layout/user.context';
 import {
   isDirty,
-  promptEditorState,
-  resetPrompt,
-  setPrompt,
   setProvider,
   toWriteRequest,
 } from '@gitroom/frontend/components/agents/agent.settings.state';
@@ -72,13 +69,10 @@ export const AgentSettings: FC = () => {
     );
   }
 
-  const isSuperAdmin = Boolean(user?.isSuperAdmin);
-
   return (
     <AgentSettingsForm
       key={`${orgId}-${view.revision}`}
       view={view}
-      isSuperAdmin={isSuperAdmin}
       t={t}
       fetch={fetch}
       mutate={mutate}
@@ -88,11 +82,10 @@ export const AgentSettings: FC = () => {
 
 const AgentSettingsForm: FC<{
   view: AgentConfigView;
-  isSuperAdmin: boolean;
   t: ReturnType<typeof useT>;
   fetch: ReturnType<typeof useFetch>;
   mutate: KeyedMutator<AgentConfigView>;
-}> = ({ view, isSuperAdmin, t, fetch, mutate }) => {
+}> = ({ view, t, fetch, mutate }) => {
   const [overrides, setOverrides] = useState<AgentConfigOverrides>(view.overrides);
   const [secrets, setSecrets] = useState<SecretChanges>({});
   const [mcpTokens, setMcpTokens] = useState<Record<string, string>>({});
@@ -108,8 +101,6 @@ const AgentSettingsForm: FC<{
   const builtinSelected = new Set(
     overrides.builtinTools ?? view.effective.builtinTools ?? []
   );
-
-  const promptState = promptEditorState(view, overrides);
 
   const save = async () => {
     setSaving(true);
@@ -262,42 +253,6 @@ const AgentSettingsForm: FC<{
         >
           {status.text}
         </div>
-      )}
-
-      {isSuperAdmin && (
-        <section className="flex flex-col gap-[8px]">
-          <div className="flex items-center gap-[8px] flex-wrap">
-            <h3 className="text-[18px] font-[500] flex-1">
-              {t('agent_prompt_title', 'System prompt')}
-            </h3>
-            {promptState.edited && (
-              <>
-                <span className="text-[11px] text-[#c9a7ff] bg-[#612bd3]/20 border border-[#4a2a86] rounded-full px-[8px] py-[1px]">
-                  {t('agent_prompt_edited', 'Edited')}
-                </span>
-                <button
-                  type="button"
-                  className="text-[12px] underline opacity-60 hover:opacity-100"
-                  onClick={() => setOverrides(resetPrompt(overrides))}
-                >
-                  {t('agent_prompt_reset', 'Reset')}
-                </button>
-              </>
-            )}
-            <span className="text-[12px] opacity-60">
-              {t('agent_source', 'source')}:{' '}
-              {t(`agent_source_${view.sources.prompt}`, view.sources.prompt)}
-            </span>
-          </div>
-          <textarea
-            rows={14}
-            className={inputClass}
-            value={promptState.value}
-            onChange={(event) =>
-              setOverrides(setPrompt(overrides, event.target.value))
-            }
-          />
-        </section>
       )}
 
       <section className="flex flex-col gap-[8px]">

@@ -215,7 +215,7 @@ const SkillEditor: FC<{
           className="bg-btnPrimary text-white rounded-[8px] px-[14px] py-[8px] disabled:opacity-40"
           onClick={() => onSave(skill)}
         >
-          {t('agent_save', 'Save')}
+          {t('agent_apply', 'Apply')}
         </button>
         <button
           type="button"

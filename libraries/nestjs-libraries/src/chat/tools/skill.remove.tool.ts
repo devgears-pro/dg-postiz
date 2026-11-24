@@ -3,12 +3,17 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { Injectable } from '@nestjs/common';
 import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
+import {
+  canManageSkills,
+  readOrganizationAccess,
+} from '@gitroom/nestjs-libraries/chat/agent.access';
 import { AgentConfigService } from '@gitroom/nestjs-libraries/chat/agent.config.service';
 
 @Injectable()
 export class SkillRemoveTool implements AgentToolInterface {
   constructor(private _agentConfigService: AgentConfigService) {}
   name = 'skillRemoveTool';
+  optionalOnSelfHosted = true;
 
   run() {
     return createTool({
@@ -42,18 +47,25 @@ Only skills created for this organization can be deleted.
       }),
       execute: async (inputData, context) => {
         checkAuth(inputData, context);
-        const ctx = context as
-          | { requestContext?: { get?: (key: string) => unknown } }
-          | undefined;
-        const orgRaw = ctx?.requestContext?.get?.('organization');
-        const organizationId =
-          typeof orgRaw === 'string'
-            ? (JSON.parse(orgRaw) as { id: string }).id
-            : (orgRaw as { id: string } | undefined)?.id;
+        const organization = readOrganizationAccess(
+          context as { requestContext?: { get?: (key: string) => unknown } }
+        );
+
+        if (!organization?.id) {
+          return { output: { errors: 'Organization context is missing' } };
+        }
+
+        if (!canManageSkills(organization)) {
+          return {
+            output: {
+              errors: 'Only organization administrators can manage skills',
+            },
+          };
+        }
 
         try {
           await this._agentConfigService.removeSkill(
-            organizationId,
+            organization.id,
             inputData.name
           );
           return {
