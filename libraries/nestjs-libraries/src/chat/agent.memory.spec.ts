@@ -40,7 +40,7 @@ class MockAgentConfigRepository extends AgentConfigRepository {
   private readonly memoryStore = new Map<string, string[]>();
 
   constructor() {
-    super(undefined as never);
+    super({} as unknown as ConstructorParameters<typeof AgentConfigRepository>[0]);
   }
 
   override async find(orgId: string): Promise<AgentConfigRecord | null> {

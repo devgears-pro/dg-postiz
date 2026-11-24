@@ -61,7 +61,7 @@ export class MediaRepository {
       where: {
         id,
         organizationId: org,
-        deletedAt: null as Date | null,
+        deletedAt: null,
       },
       select: {
         id: true,
@@ -135,7 +135,7 @@ export class MediaRepository {
         organization: {
           id: org,
         },
-        deletedAt: null as Date | null,
+        deletedAt: null,
         status: { not: 'processing' },
         ...searchFilter,
       },
@@ -144,7 +144,7 @@ export class MediaRepository {
     const results = await this._media.model.media.findMany({
       where: {
         organizationId: org,
-        deletedAt: null as Date | null,
+        deletedAt: null,
         // still being normalized: it shows up once the workflow releases it
         status: { not: 'processing' },
         ...searchFilter,
