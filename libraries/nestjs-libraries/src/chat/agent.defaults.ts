@@ -377,8 +377,7 @@ export async function loadAgentDefaults(
     Boolean(langfusePublicKeyEnv && env[langfusePublicKeyEnv]?.trim()) &&
     Boolean(langfuseSecretKeyEnv && env[langfuseSecretKeyEnv]?.trim());
   const langfuseConfigured = langfuseCredentialConfigured;
-  const langfuseCaptureContentEnv =
-    env.LANGFUSE_CAPTURE_CONTENT ?? env.POSTIZ_AI_LANGFUSE_CAPTURE_CONTENT;
+  const langfuseCaptureContentEnv = env.LANGFUSE_CAPTURE_CONTENT;
   const captureContentFromEnv =
     typeof langfuseCaptureContentEnv === 'string'
       ? langfuseCaptureContentEnv.trim().toLowerCase() === 'true'
