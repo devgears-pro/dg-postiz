@@ -285,11 +285,7 @@ export const agentConfigWriteRequestSchema = z
   })
   .strict();
 
-export type AgentConfigWriteRequest = {
-  expectedRevision: number;
-  overrides: AgentConfigOverrides;
-  secrets?: SecretChanges;
-};
+export type AgentConfigWriteRequest = z.infer<typeof agentConfigWriteRequestSchema>;
 
 export const resetAgentConfigSchema = z
   .object({
@@ -327,19 +323,9 @@ export const mcpTestInputSchema = z
   })
   .strict();
 
-export type ProviderTestInput = {
-  expectedRevision: number;
-  provider?: { baseUrl: string };
-  model?: string;
-  apiKey?: string;
-};
+export type ProviderTestInput = z.infer<typeof providerTestInputSchema>;
 
-export type McpTestInput = {
-  expectedRevision: number;
-  serverId: string;
-  server: Omit<McpServerDefinition, 'enabledTools'>;
-  bearerToken?: string;
-};
+export type McpTestInput = z.infer<typeof mcpTestInputSchema>;
 
 export const emptyAgentConfigOverrides = (): AgentConfigOverrides => ({});
 

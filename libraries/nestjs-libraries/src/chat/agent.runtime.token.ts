@@ -12,6 +12,6 @@ export type PreparedAgentForRuntime = {
 
 export type AgentRuntimeLike = {
   ensurePrepared(
-    requestContext: RequestContext<any>
+    requestContext: RequestContext<Record<string, unknown>>
   ): Promise<PreparedAgentForRuntime>;
 };

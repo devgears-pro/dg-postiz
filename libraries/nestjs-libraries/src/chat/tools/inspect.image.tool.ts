@@ -69,12 +69,24 @@ The image arrives as a user message; answer after it appears. Do not inspect ima
       execute: async (inputData, context) => {
         checkAuth(inputData, context);
         try {
-          const organization = JSON.parse(
-            (context?.requestContext as any)?.get('organization') as string
-          );
+          const ctx = context as
+            | {
+                threadId?: string;
+                resourceId?: string;
+                requestContext?: { get?: (key: string) => unknown };
+              }
+            | undefined;
+          const orgRaw = ctx?.requestContext?.get?.('organization');
+          const organization =
+            typeof orgRaw === 'string'
+              ? (JSON.parse(orgRaw) as { id: string })
+              : (orgRaw as { id: string } | undefined);
+          if (!organization?.id) {
+            throw new InspectionError('Organization context is missing.');
+          }
           const threadId =
-            (context as any)?.threadId ??
-            ((context?.requestContext as any)?.get('threadId') as string);
+            ctx?.threadId ??
+            (ctx?.requestContext?.get?.('threadId') as string | undefined);
           if (!threadId) {
             throw new InspectionError(
               'The image cannot be added without an active conversation.'
@@ -83,7 +95,7 @@ The image arrives as a user message; answer after it appears. Do not inspect ima
 
           return await this.inspect(organization.id, inputData.mediaId, {
             threadId,
-            resourceId: (context as any)?.resourceId ?? organization.id,
+            resourceId: ctx?.resourceId ?? organization.id,
           });
         } catch (error) {
           Logger.warn(

@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { AgentConfigService } from './agent.config.service';
 import type {
   AgentConfigOverrides,
   SystemAgentDefaults,
 } from '@gitroom/helpers/agent/agent.config.schema';
-import type { AgentConfigRecord } from '../database/prisma/agent-config/agent.config.repository';
+import {
+  AgentConfigRepository,
+  type AgentConfigRecord,
+} from '../database/prisma/agent-config/agent.config.repository';
+import type { AgentDefaultsProvider } from './agent.defaults.token';
 
 const mockDefaults: SystemAgentDefaults = {
   prompt: 'Default system prompt',
@@ -31,57 +35,78 @@ const mockDefaults: SystemAgentDefaults = {
   defaultsVersion: 'test-version',
 };
 
-const createMockRepo = () => {
-  const configStore = new Map<string, AgentConfigRecord>();
-  const memoryStore = new Map<string, string[]>();
+class MockAgentConfigRepository extends AgentConfigRepository {
+  private readonly configStore = new Map<string, AgentConfigRecord>();
+  private readonly memoryStore = new Map<string, string[]>();
 
-  return {
-    find: vi.fn(async (orgId: string) => configStore.get(orgId) ?? null),
-    create: vi.fn(async (input: { organizationId: string; overrides: AgentConfigOverrides }) => {
-      const record: AgentConfigRecord = {
-        organizationId: input.organizationId,
-        schemaVersion: 1,
-        revision: 1,
-        overrides: input.overrides,
-        encryptedSecrets: null,
-        secretSummary: null,
-        updatedById: null,
-      };
-      configStore.set(input.organizationId, record);
-      return record;
-    }),
-    update: vi.fn(async (orgId: string, revision: number, input: { overrides: AgentConfigOverrides }) => {
-      const existing = configStore.get(orgId);
-      const record: AgentConfigRecord = {
-        organizationId: orgId,
-        schemaVersion: 1,
-        revision: (existing?.revision ?? revision) + 1,
-        overrides: input.overrides,
-        encryptedSecrets: null,
-        secretSummary: null,
-        updatedById: null,
-      };
-      configStore.set(orgId, record);
-      return record;
-    }),
-    getMemory: vi.fn(async (orgId: string) => memoryStore.get(orgId) ?? []),
-    updateMemory: vi.fn(async (orgId: string, proverbs: string[]) => {
-      memoryStore.set(orgId, proverbs);
-      return proverbs;
-    }),
-    clearMemory: vi.fn(async (orgId: string) => {
-      memoryStore.set(orgId, []);
-    }),
-    _configStore: configStore,
-    _memoryStore: memoryStore,
-  };
-};
+  constructor() {
+    super(undefined as never);
+  }
+
+  override async find(orgId: string): Promise<AgentConfigRecord | null> {
+    return this.configStore.get(orgId) ?? null;
+  }
+
+  override async create(input: {
+    organizationId: string;
+    overrides: AgentConfigOverrides;
+  }): Promise<AgentConfigRecord> {
+    const record: AgentConfigRecord = {
+      organizationId: input.organizationId,
+      schemaVersion: 1,
+      revision: 1,
+      overrides: input.overrides,
+      encryptedSecrets: null,
+      secretSummary: null,
+      updatedById: null,
+    };
+    this.configStore.set(input.organizationId, record);
+    return record;
+  }
+
+  override async update(
+    orgId: string,
+    revision: number,
+    input: { overrides: AgentConfigOverrides }
+  ): Promise<AgentConfigRecord | null> {
+    const existing = this.configStore.get(orgId);
+    const record: AgentConfigRecord = {
+      organizationId: orgId,
+      schemaVersion: 1,
+      revision: (existing?.revision ?? revision) + 1,
+      overrides: input.overrides,
+      encryptedSecrets: null,
+      secretSummary: null,
+      updatedById: null,
+    };
+    this.configStore.set(orgId, record);
+    return record;
+  }
+
+  override async getMemory(orgId: string): Promise<string[]> {
+    return this.memoryStore.get(orgId) ?? [];
+  }
+
+  override async updateMemory(
+    orgId: string,
+    proverbs: string[]
+  ): Promise<string[]> {
+    this.memoryStore.set(orgId, proverbs);
+    return proverbs;
+  }
+
+  override async clearMemory(orgId: string): Promise<void> {
+    this.memoryStore.set(orgId, []);
+  }
+}
 
 describe('Agent Working Memory Management', () => {
   const setup = () => {
-    const repo = createMockRepo();
-    const defaultsProvider = { get: async () => mockDefaults };
-    const service = new AgentConfigService(repo as any, defaultsProvider as any);
+    const repo = new MockAgentConfigRepository();
+    const defaultsProvider: AgentDefaultsProvider = {
+      get: async () => mockDefaults,
+    };
+    const service = new AgentConfigService(repo, defaultsProvider);
     return { repo, service };
   };
 

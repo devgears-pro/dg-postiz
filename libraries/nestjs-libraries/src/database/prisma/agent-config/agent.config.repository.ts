@@ -1,4 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
+import { OrganizationAgentConfig } from '@prisma/client';
 import { AgentConfigOverrides } from '@gitroom/helpers/agent/agent.config.schema';
 import type { AgentSecretSummary } from '@gitroom/nestjs-libraries/chat/agent.secrets';
 import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
@@ -21,6 +22,21 @@ export type AgentConfigWrite = {
   updatedById: string | null;
 };
 
+const toRecord = (
+  row: OrganizationAgentConfig | null
+): AgentConfigRecord | null => {
+  if (!row) return null;
+  return {
+    organizationId: row.organizationId,
+    schemaVersion: row.schemaVersion,
+    revision: row.revision,
+    overrides: row.overrides as AgentConfigOverrides,
+    encryptedSecrets: row.encryptedSecrets,
+    secretSummary: row.secretSummary as AgentSecretSummary | null,
+    updatedById: row.updatedById,
+  };
+};
+
 const conflict = () =>
   new ConflictException(
     'The agent configuration changed since it was loaded. Reload it and try again.'
@@ -29,18 +45,21 @@ const conflict = () =>
 @Injectable()
 export class AgentConfigRepository {
   constructor(
-    private _config: PrismaRepository<'organizationAgentConfig'>
+    private _config: PrismaRepository<
+      'organizationAgentConfig' | 'mastra_resources'
+    >
   ) {}
 
-  find(organizationId: string): Promise<AgentConfigRecord | null> {
-    return this._config.model.organizationAgentConfig.findUnique({
+  async find(organizationId: string): Promise<AgentConfigRecord | null> {
+    const row = await this._config.model.organizationAgentConfig.findUnique({
       where: { organizationId },
-    }) as unknown as Promise<AgentConfigRecord | null>;
+    });
+    return toRecord(row);
   }
 
   async create(input: AgentConfigWrite): Promise<AgentConfigRecord> {
     try {
-      return (await this._config.model.organizationAgentConfig.create({
+      const row = await this._config.model.organizationAgentConfig.create({
         data: {
           organizationId: input.organizationId,
           schemaVersion: 1,
@@ -50,7 +69,8 @@ export class AgentConfigRepository {
           secretSummary: input.secretSummary,
           updatedById: input.updatedById,
         },
-      })) as unknown as AgentConfigRecord;
+      });
+      return toRecord(row)!;
     } catch (error) {
       if ((error as { code?: string })?.code === 'P2002') {
         throw conflict();
@@ -83,8 +103,7 @@ export class AgentConfigRepository {
   }
 
   async getMemory(organizationId: string): Promise<string[]> {
-    const prisma = this._config.model as any;
-    const record = await prisma.mastra_resources.findUnique({
+    const record = await this._config.model.mastra_resources.findUnique({
       where: { id: organizationId },
       select: { workingMemory: true },
     });
@@ -101,10 +120,9 @@ export class AgentConfigRepository {
     organizationId: string,
     proverbs: string[]
   ): Promise<string[]> {
-    const prisma = this._config.model as any;
     const workingMemory = JSON.stringify({ proverbs });
     const now = new Date();
-    await prisma.mastra_resources.upsert({
+    await this._config.model.mastra_resources.upsert({
       where: { id: organizationId },
       create: {
         id: organizationId,
@@ -121,9 +139,8 @@ export class AgentConfigRepository {
   }
 
   async clearMemory(organizationId: string): Promise<void> {
-    const prisma = this._config.model as any;
     const now = new Date();
-    await prisma.mastra_resources.upsert({
+    await this._config.model.mastra_resources.upsert({
       where: { id: organizationId },
       create: {
         id: organizationId,

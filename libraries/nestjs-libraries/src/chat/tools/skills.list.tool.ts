@@ -48,9 +48,14 @@ Optionally supply "name" to retrieve the full instructions and references for a 
       }),
       execute: async (inputData, context) => {
         checkAuth(inputData, context);
-        const orgRaw = (context?.requestContext as any)?.get('organization');
+        const ctx = context as
+          | { requestContext?: { get?: (key: string) => unknown } }
+          | undefined;
+        const orgRaw = ctx?.requestContext?.get?.('organization');
         const organizationId =
-          typeof orgRaw === 'string' ? JSON.parse(orgRaw).id : orgRaw?.id;
+          typeof orgRaw === 'string'
+            ? (JSON.parse(orgRaw) as { id: string }).id
+            : (orgRaw as { id: string } | undefined)?.id;
 
         const allSkills = await this._agentConfigService.listSkills(organizationId);
         const filtered = inputData?.name

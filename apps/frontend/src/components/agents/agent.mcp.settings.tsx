@@ -2,6 +2,7 @@
 
 import React, { FC } from 'react';
 import type {
+  AgentConfigOverrides,
   AgentConfigView,
   McpServerDefinition,
 } from '@gitroom/helpers/agent/agent.config.schema';
@@ -20,9 +21,9 @@ const EMPTY_SERVER: McpServerDefinition = {
 
 export const AgentMcpSettings: FC<{
   view: AgentConfigView;
-  overrides: any;
+  overrides: AgentConfigOverrides;
   tokens: Record<string, string>;
-  onChange: (overrides: any) => void;
+  onChange: (overrides: AgentConfigOverrides) => void;
   onToken: (id: string, token: string) => void;
   onTest: (id: string, server: McpServerDefinition, token?: string) => void;
 }> = ({ view, overrides, tokens, onChange, onToken, onTest }) => {

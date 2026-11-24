@@ -33,7 +33,7 @@ export type AgentRuntimeOptions = {
 };
 
 export type AgentPrepared = {
-  bundle: ResolvedAgentBundle;
+  bundle?: ResolvedAgentBundle;
   config: ResolvedAgentConfig;
   model: AgentModel;
   titleModel: AgentModel;
@@ -41,7 +41,7 @@ export type AgentPrepared = {
   skills: unknown[];
   observabilityKey: string;
   release: () => Promise<void>;
-  applyTo: (requestContext: RequestContext<any>) => void;
+  applyTo: (requestContext: RequestContext<Record<string, unknown>>) => void;
 };
 
 const toInlineSkill = (skill: ResolvedSkill) =>
@@ -118,10 +118,11 @@ export class AgentRuntimeService {
     };
   }
 
-  async ensurePrepared(requestContext: RequestContext<any>): Promise<AgentPrepared> {
+  async ensurePrepared(
+    requestContext: RequestContext<Record<string, unknown>>
+  ): Promise<AgentPrepared> {
     if (requestContext.get(AGENT_CONTEXT_KEYS.prepared)) {
       return {
-        bundle: undefined as unknown as ResolvedAgentBundle,
         config: requestContext.get(AGENT_CONTEXT_KEYS.config),
         model: requestContext.get(AGENT_CONTEXT_KEYS.model),
         titleModel: requestContext.get(AGENT_CONTEXT_KEYS.titleModel),

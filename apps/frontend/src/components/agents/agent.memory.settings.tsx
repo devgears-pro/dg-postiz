@@ -25,6 +25,7 @@ export const AgentMemorySettings: FC = () => {
   );
 
   const proverbs = data?.proverbs ?? [];
+  const [isFolded, setIsFolded] = useState(true);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
   const [newText, setNewText] = useState('');
@@ -153,63 +154,83 @@ export const AgentMemorySettings: FC = () => {
         </div>
       ) : (
         <div className="flex flex-col gap-[8px]">
-          {proverbs.map((item, index) => (
-            <div
-              key={index}
-              className="flex flex-col gap-[8px] border border-newTableBorder rounded-[8px] p-[12px]"
-            >
-              {editingIndex === index ? (
-                <div className="flex flex-col gap-[8px]">
-                  <textarea
-                    rows={3}
-                    className="bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[14px]"
-                    value={editingText}
-                    onChange={(e) => setEditingText(e.target.value)}
-                  />
-                  <div className="flex gap-[8px]">
-                    <button
-                      type="button"
-                      disabled={saving || !editingText.trim()}
-                      className="bg-btnPrimary text-white rounded-[8px] px-[12px] py-[6px] text-[13px] disabled:opacity-40"
-                      onClick={handleSaveEdit}
-                    >
-                      {t('agent_save', 'Save')}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      className="bg-btnSimple text-btnText rounded-[8px] px-[12px] py-[6px] text-[13px]"
-                      onClick={() => setEditingIndex(null)}
-                    >
-                      {t('agent_cancel', 'Cancel')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-start gap-[8px] justify-between">
-                  <p className="text-[14px] flex-1 whitespace-pre-wrap">{item}</p>
-                  <div className="flex items-center gap-[8px] shrink-0">
-                    <button
-                      type="button"
-                      disabled={saving}
-                      className="text-[13px] underline opacity-80 hover:opacity-100"
-                      onClick={() => handleEdit(index)}
-                    >
-                      {t('agent_edit', 'Edit')}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      className="text-[13px] underline text-red-400 opacity-80 hover:opacity-100"
-                      onClick={() => handleDelete(index)}
-                    >
-                      {t('agent_remove', 'Remove')}
-                    </button>
-                  </div>
-                </div>
-              )}
+          {proverbs.length > 0 && !isAdding && editingIndex === null && (
+            <div className="flex items-center justify-between p-[10px] bg-newBgColorInner border border-newTableBorder rounded-[8px]">
+              <span className="text-[13px] opacity-80">
+                {t('agent_memory_count', 'Saved facts: {{count}}', {
+                  count: proverbs.length,
+                })}
+              </span>
+              <button
+                type="button"
+                className="text-[13px] underline opacity-80 hover:opacity-100"
+                onClick={() => setIsFolded(!isFolded)}
+              >
+                {isFolded
+                  ? t('agent_memory_show', 'Show facts')
+                  : t('agent_memory_hide', 'Hide facts')}
+              </button>
             </div>
-          ))}
+          )}
+
+          {(!isFolded || editingIndex !== null || isAdding) &&
+            proverbs.map((item, index) => (
+              <div
+                key={index}
+                className="flex flex-col gap-[8px] border border-newTableBorder rounded-[8px] p-[12px]"
+              >
+                {editingIndex === index ? (
+                  <div className="flex flex-col gap-[8px]">
+                    <textarea
+                      rows={3}
+                      className="bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[14px]"
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                    />
+                    <div className="flex gap-[8px]">
+                      <button
+                        type="button"
+                        disabled={saving || !editingText.trim()}
+                        className="bg-btnPrimary text-white rounded-[8px] px-[12px] py-[6px] text-[13px] disabled:opacity-40"
+                        onClick={handleSaveEdit}
+                      >
+                        {t('agent_save', 'Save')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        className="bg-btnSimple text-btnText rounded-[8px] px-[12px] py-[6px] text-[13px]"
+                        onClick={() => setEditingIndex(null)}
+                      >
+                        {t('agent_cancel', 'Cancel')}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-[8px] justify-between">
+                    <p className="text-[14px] flex-1 whitespace-pre-wrap">{item}</p>
+                    <div className="flex items-center gap-[8px] shrink-0">
+                      <button
+                        type="button"
+                        disabled={saving}
+                        className="text-[13px] underline opacity-80 hover:opacity-100"
+                        onClick={() => handleEdit(index)}
+                      >
+                        {t('agent_edit', 'Edit')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        className="text-[13px] underline text-red-400 opacity-80 hover:opacity-100"
+                        onClick={() => handleDelete(index)}
+                      >
+                        {t('agent_remove', 'Remove')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
         </div>
       )}
 
@@ -253,7 +274,10 @@ export const AgentMemorySettings: FC = () => {
             type="button"
             disabled={saving}
             className="bg-btnSimple text-btnText rounded-[8px] px-[14px] py-[8px] text-[14px]"
-            onClick={() => setIsAdding(true)}
+            onClick={() => {
+              setIsAdding(true);
+              setIsFolded(false);
+            }}
           >
             {t('agent_memory_add_button', 'Add fact')}
           </button>

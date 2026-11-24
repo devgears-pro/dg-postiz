@@ -60,9 +60,14 @@ System skills (such as dg-marketing, social, humanizer, write-humans) cannot be 
       }),
       execute: async (inputData, context) => {
         checkAuth(inputData, context);
-        const orgRaw = (context?.requestContext as any)?.get('organization');
+        const ctx = context as
+          | { requestContext?: { get?: (key: string) => unknown } }
+          | undefined;
+        const orgRaw = ctx?.requestContext?.get?.('organization');
         const organizationId =
-          typeof orgRaw === 'string' ? JSON.parse(orgRaw).id : orgRaw?.id;
+          typeof orgRaw === 'string'
+            ? (JSON.parse(orgRaw) as { id: string }).id
+            : (orgRaw as { id: string } | undefined)?.id;
 
         try {
           const saved = await this._agentConfigService.saveSkill(
@@ -78,8 +83,9 @@ System skills (such as dg-marketing, social, humanizer, write-humans) cannot be 
               },
             },
           };
-        } catch (err: any) {
-          const message = err?.message || 'Failed to save skill';
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : 'Failed to save skill';
           return { output: { errors: message } };
         }
       },

@@ -42,9 +42,14 @@ Only skills created for this organization can be deleted.
       }),
       execute: async (inputData, context) => {
         checkAuth(inputData, context);
-        const orgRaw = (context?.requestContext as any)?.get('organization');
+        const ctx = context as
+          | { requestContext?: { get?: (key: string) => unknown } }
+          | undefined;
+        const orgRaw = ctx?.requestContext?.get?.('organization');
         const organizationId =
-          typeof orgRaw === 'string' ? JSON.parse(orgRaw).id : orgRaw?.id;
+          typeof orgRaw === 'string'
+            ? (JSON.parse(orgRaw) as { id: string }).id
+            : (orgRaw as { id: string } | undefined)?.id;
 
         try {
           await this._agentConfigService.removeSkill(
@@ -57,8 +62,9 @@ Only skills created for this organization can be deleted.
               removed: inputData.name,
             },
           };
-        } catch (err: any) {
-          const message = err?.message || 'Failed to remove skill';
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : 'Failed to remove skill';
           return { output: { errors: message } };
         }
       },

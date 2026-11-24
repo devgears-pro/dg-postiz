@@ -63,16 +63,16 @@ export const MediaPortal: FC<{
   );
 };
 
-export const AgentList: FC<{ onChange: (arr: any[]) => void }> = ({
+export const AgentList: FC<{ onChange: (arr: string[]) => void }> = ({
   onChange,
 }) => {
   const fetch = useFetch();
   const t = useT();
-  const [selected, setSelected] = useState([]);
+  const [selected, setSelected] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     return (await (await fetch('/integrations/list')).json()).integrations;
-  }, []);
+  }, [fetch]);
 
   const [collapseMenu, setCollapseMenu] = useCookie('collapseMenu', '0');
 
@@ -96,7 +96,7 @@ export const AgentList: FC<{ onChange: (arr: any[]) => void }> = ({
         setSelected([...selected, integration]);
       }
     },
-    [selected]
+    [selected, onChange]
   );
 
   const sortedIntegrations = useMemo(() => {
@@ -248,7 +248,7 @@ const Threads: FC = () => {
   const t = useT();
   const threads = useCallback(async () => {
     return (await fetch('/copilot/list')).json();
-  }, []);
+  }, [fetch]);
   const { id } = useParams<{ id: string }>();
 
   const { data } = useSWR('threads', threads);
@@ -288,7 +288,7 @@ const Threads: FC = () => {
           </Link>
         </div>
         <div className="flex flex-col gap-[1px] mobile:flex-row mobile:gap-[4px]">
-          {data?.threads?.map((p: any) => (
+          {data?.threads?.map((p: { id: string; title: string }) => (
             <Link
               className={clsx(
                 'overflow-ellipsis overflow-hidden whitespace-nowrap hover:bg-newBgColor px-[10px] py-[6px] rounded-[10px] cursor-pointer mobile:shrink-0 mobile:max-w-[180px] mobile:border mobile:border-newTableBorder',

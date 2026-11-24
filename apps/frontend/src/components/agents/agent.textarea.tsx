@@ -46,7 +46,7 @@ const AutoResizingTextarea = forwardRef<HTMLTextAreaElement, AutoResizingTextare
       };
 
       calculateMaxHeight();
-    }, [maxRows]);
+    }, [maxRows, autoFocus]);
 
     useEffect(() => {
       const textarea = internalTextareaRef.current;

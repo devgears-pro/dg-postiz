@@ -4,6 +4,7 @@ import {
   ConflictException,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Post,
   Put,
@@ -38,8 +39,33 @@ export class AgentConfigController {
   ) {}
 
   @Get('/')
-  get(@GetOrgFromRequest() organization: Organization) {
-    return this._agentConfigService.getView(organization.id);
+  async get(
+    @GetOrgFromRequest() organization: Organization,
+    @GetUserFromRequest() user: User
+  ) {
+    const view = await this._agentConfigService.getView(organization.id);
+    if (!user?.isSuperAdmin) {
+      return {
+        ...view,
+        defaults: {
+          ...view.defaults,
+          prompt: '',
+        },
+        effective: {
+          ...view.effective,
+          prompt: '',
+        },
+        overrides: {
+          ...view.overrides,
+          systemPrompt: undefined,
+        },
+        sources: {
+          ...view.sources,
+          prompt: 'hidden',
+        },
+      };
+    }
+    return view;
   }
 
   @Put('/')
@@ -59,10 +85,16 @@ export class AgentConfigController {
       });
     }
 
+    if (!user?.isSuperAdmin && parsed.data.overrides?.systemPrompt !== undefined) {
+      throw new ForbiddenException(
+        'Only system superadministrators can change the system prompt'
+      );
+    }
+
     return this._agentConfigService.save(
       organization.id,
       user?.id ?? null,
-      parsed.data as unknown as AgentConfigWriteRequest
+      parsed.data
     );
   }
 
@@ -139,10 +171,7 @@ export class AgentConfigController {
     }
 
     await this.assertRevision(organization.id, parsed.data.expectedRevision);
-    return this._connections.testProvider(
-      organization.id,
-      parsed.data as unknown as ProviderTestInput
-    );
+    return this._connections.testProvider(organization.id, parsed.data);
   }
 
   @Post('/test-mcp')
@@ -162,10 +191,7 @@ export class AgentConfigController {
     }
 
     await this.assertRevision(organization.id, parsed.data.expectedRevision);
-    return this._connections.testMcp(
-      organization.id,
-      parsed.data as unknown as McpTestInput
-    );
+    return this._connections.testMcp(organization.id, parsed.data);
   }
 
   private async assertRevision(

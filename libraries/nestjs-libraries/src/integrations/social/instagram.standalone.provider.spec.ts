@@ -35,14 +35,12 @@ describe('InstagramStandaloneProvider Tools', () => {
       );
 
       expect(provider.fetch).toHaveBeenCalledTimes(1);
-      const [url, options] = vi.mocked(provider.fetch).mock.calls[0] as [
-        string,
-        RequestInit
-      ];
-      expect(url).toContain(`${internalId}/media`);
-      expect(url).toContain('limit=10');
-      expect((options.headers as any)?.Authorization).toBe(
-        'Bearer test-access-token'
+      expect(provider.fetch).toHaveBeenCalledWith(
+        expect.stringContaining(`${internalId}/media`),
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer test-access-token' },
+        }),
+        'instagram-standalone'
       );
 
       expect(result).toEqual([

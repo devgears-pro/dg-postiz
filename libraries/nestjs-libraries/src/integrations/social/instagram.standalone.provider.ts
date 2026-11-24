@@ -336,7 +336,15 @@ export class InstagramStandaloneProvider
       )
     ).json();
 
-    return (response?.data || []).map((post: any) => ({
+    interface InstagramPostItem {
+      id: string;
+      caption?: string;
+      media_type: string;
+      timestamp: string;
+      permalink: string;
+    }
+
+    return ((response?.data as InstagramPostItem[]) || []).map((post) => ({
       id: post.id,
       caption: post.caption || '',
       mediaType: post.media_type,
@@ -439,14 +447,24 @@ export class InstagramStandaloneProvider
       )
     ).json();
 
-    return (response?.data || []).map((comment: any) => ({
+    interface InstagramCommentItem {
+      id: string;
+      text?: string;
+      timestamp: string;
+      username: string;
+      like_count?: number;
+      hidden?: boolean;
+      replies?: { data?: InstagramCommentItem[] };
+    }
+
+    return ((response?.data as InstagramCommentItem[]) || []).map((comment) => ({
       id: comment.id,
       text: comment.text || '',
       timestamp: comment.timestamp,
       username: comment.username,
       likeCount: comment.like_count ?? 0,
       hidden: comment.hidden ?? false,
-      replies: (comment.replies?.data || []).map((reply: any) => ({
+      replies: (comment.replies?.data || []).map((reply) => ({
         id: reply.id,
         text: reply.text || '',
         timestamp: reply.timestamp,
