@@ -15,8 +15,12 @@ const REQUEST_CONTEXT_KEYS = [
 
 const hideContentProcessor: SpanOutputProcessor = {
   name: 'postiz-hide-agent-content',
-  process: (span?: AnySpan) =>
-    span ? { ...span, input: undefined, output: undefined } : span,
+  process: (span?: AnySpan) => {
+    if (!span) return span;
+    span.input = undefined;
+    span.output = undefined;
+    return span;
+  },
   shutdown: async () => undefined,
 };
 
