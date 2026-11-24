@@ -37,7 +37,9 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     --mount=type=cache,id=next-cache,target=/app/apps/frontend/.next/cache \
     NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
 
-RUN rm -rf apps/frontend/.next/cache \
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm prune --prod --ignore-scripts \
+    && rm -rf apps/frontend/.next/cache \
     && rm -rf /root/.local/share/pnpm \
     && rm -rf /root/.cache \
     && rm -rf /tmp/*
