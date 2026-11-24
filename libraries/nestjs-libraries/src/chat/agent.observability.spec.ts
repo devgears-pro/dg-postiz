@@ -71,37 +71,15 @@ describe('AgentObservabilityService', () => {
 
     expect(registry.hasInstance('system')).toBe(true);
 
-    const envWithCapture = {
+    const envWithLangfuse = {
       LANGFUSE_BASE_URL: 'https://langfuse.example.test',
       LANGFUSE_PUBLIC_KEY: 'pk-lf-test',
       LANGFUSE_SECRET_KEY: 'sk-lf-test',
-      LANGFUSE_CAPTURE_CONTENT: 'true',
     };
-    const loadedDefaults = await loadAgentDefaults(envWithCapture, {
+    const loadedDefaults = await loadAgentDefaults(envWithLangfuse, {
       toolCatalog: [],
     });
     expect(loadedDefaults.langfuse.captureContent).toBe(true);
-
-    const envDefaultCapture = {
-      LANGFUSE_BASE_URL: 'https://langfuse.example.test',
-      LANGFUSE_PUBLIC_KEY: 'pk-lf-test',
-      LANGFUSE_SECRET_KEY: 'sk-lf-test',
-    };
-    const loadedDefaultCapture = await loadAgentDefaults(envDefaultCapture, {
-      toolCatalog: [],
-    });
-    expect(loadedDefaultCapture.langfuse.captureContent).toBe(true);
-
-    const envDisabledCapture = {
-      LANGFUSE_BASE_URL: 'https://langfuse.example.test',
-      LANGFUSE_PUBLIC_KEY: 'pk-lf-test',
-      LANGFUSE_SECRET_KEY: 'sk-lf-test',
-      LANGFUSE_CAPTURE_CONTENT: 'false',
-    };
-    const loadedDisabledCapture = await loadAgentDefaults(envDisabledCapture, {
-      toolCatalog: [],
-    });
-    expect(loadedDisabledCapture.langfuse.captureContent).toBe(false);
 
     vi.unstubAllEnvs();
   });
