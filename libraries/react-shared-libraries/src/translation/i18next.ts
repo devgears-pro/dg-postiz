@@ -20,7 +20,7 @@ i18next
     fallbackNS: defaultNS,
     defaultNS,
     detection: {
-      order: ['cookie', 'navigator', 'htmlTag'],
+      order: ['cookie', 'htmlTag', 'navigator'],
       lookupCookie: cookieName,
       caches: ['cookie'],
     },
