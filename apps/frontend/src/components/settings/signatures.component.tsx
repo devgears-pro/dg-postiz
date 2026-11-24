@@ -17,6 +17,7 @@ export const SignaturesComponent: FC<{
   appendSignature?: (value: string) => void;
 }> = (props) => {
   const { appendSignature } = props;
+  const t = useT();
   const fetch = useFetch();
   const modal = useModals();
   const toaster = useToaster();
@@ -27,12 +28,14 @@ export const SignaturesComponent: FC<{
   const addSignature = useCallback(
     (data?: any) => () => {
       modal.openModal({
-        title: data ? 'Edit Signature' : 'Add Signature',
+        title: data
+          ? t('edit_signature', 'Edit Signature')
+          : t('add_signature', 'Add Signature'),
         withCloseButton: true,
         children: <AddOrRemoveSignature data={data} reload={mutate} />,
       });
     },
-    [mutate]
+    [mutate, t]
   );
 
   const deleteSignature = useCallback(
@@ -50,13 +53,14 @@ export const SignaturesComponent: FC<{
           method: 'DELETE',
         });
         mutate();
-        toaster.show('Signature deleted successfully', 'success');
+        toaster.show(
+          t('signature_deleted', 'Signature deleted successfully'),
+          'success'
+        );
       }
     },
-    []
+    [t, mutate, toaster, fetch]
   );
-
-  const t = useT();
 
   return (
     <div className="flex flex-col">
@@ -106,7 +110,7 @@ export const SignaturesComponent: FC<{
                       <span className="hidden mobile:inline">
                         {t('auto_add', 'Auto Add?')}{' '}
                       </span>
-                      {p.autoAdd ? 'Yes' : 'No'}
+                      {p.autoAdd ? t('yes', 'Yes') : t('no', 'No')}
                     </div>
                   </div>
                   {!!appendSignature && (
@@ -168,6 +172,7 @@ const AddOrRemoveSignature: FC<{
   reload: () => void;
 }> = (props) => {
   const { data, reload } = props;
+  const t = useT();
   const toast = useToaster();
   const fetch = useFetch();
   const form = useForm({
@@ -188,17 +193,15 @@ const AddOrRemoveSignature: FC<{
       });
       toast.show(
         data?.id
-          ? 'Signature updated successfully'
-          : 'Signature added successfully',
+          ? t('signature_updated', 'Signature updated successfully')
+          : t('signature_added', 'Signature added successfully'),
         'success'
       );
       modal.closeCurrent();
       reload();
     },
-    [data, modal]
+    [data, modal, t, reload, fetch, toast]
   );
-
-  const t = useT();
 
   return (
     <FormProvider {...form}>

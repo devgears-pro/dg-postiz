@@ -275,7 +275,8 @@ const AgentSettingsForm: FC<{
             </>
           )}
           <span className="text-[12px] opacity-60">
-            {t('agent_source', 'source')}: {view.sources.prompt}
+            {t('agent_source', 'source')}:{' '}
+            {t(`agent_source_${view.sources.prompt}`, view.sources.prompt)}
           </span>
         </div>
         <textarea
