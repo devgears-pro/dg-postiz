@@ -1,10 +1,7 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { Observability } from '@mastra/observability';
 import { LangfuseExporter } from '@mastra/langfuse';
-import type {
-  AnySpan,
-  SpanOutputProcessor,
-} from '@mastra/core/observability';
+import type { AnySpan, SpanOutputProcessor } from '@mastra/core/observability';
 import type { SystemAgentDefaults } from '@gitroom/helpers/agent/agent.config.schema';
 import type { ResolvedAgentBundle } from '@gitroom/nestjs-libraries/chat/agent.config.service';
 
@@ -75,9 +72,11 @@ export class AgentObservabilityService implements OnApplicationShutdown {
     this._registry = new Observability({
       configs: configs as never,
       configSelector: ({ requestContext }) => {
-        const key = (requestContext as any)?.get('agentObservabilityKey') as
-          | string
-          | undefined;
+        const raw =
+          requestContext && typeof requestContext.getRaw === 'function'
+            ? requestContext.getRaw('agentObservabilityKey')
+            : undefined;
+        const key = typeof raw === 'string' ? raw : undefined;
         if (!key || !this._registry?.hasInstance(key)) return 'disabled';
         return key;
       },
