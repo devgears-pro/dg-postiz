@@ -3,7 +3,8 @@
 import { useCalendar, ListStateFilter } from '@gitroom/frontend/components/launches/calendar.context';
 import clsx from 'clsx';
 import type { Dayjs } from 'dayjs';
-import { useCallback, useState } from 'react';
+import dayjs from 'dayjs';
+import { useCallback, useEffect, useState } from 'react';
 import { SelectCustomer } from '@gitroom/frontend/components/launches/select.customer';
 import { SelectChannels } from '@gitroom/frontend/components/launches/select.channels';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
@@ -47,9 +48,21 @@ export const Filters = () => {
   const calendar = useCalendar();
   const t = useT();
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [currentLanguage, setCurrentLanguage] = useState(
+    i18next.resolvedLanguage || 'en'
+  );
 
-  // Set dayjs locale based on current language
-  const currentLanguage = i18next.resolvedLanguage || 'en';
+  useEffect(() => {
+    dayjs.locale(i18next.resolvedLanguage || 'en');
+    const onLanguageChanged = (lng: string) => {
+      dayjs.locale(lng);
+      setCurrentLanguage(lng);
+    };
+    i18next.on('languageChanged', onLanguageChanged);
+    return () => {
+      i18next.off('languageChanged', onLanguageChanged);
+    };
+  }, []);
 
   // Calculate display date range text, short is the phone version
   const getDisplayText = (short?: boolean) => {

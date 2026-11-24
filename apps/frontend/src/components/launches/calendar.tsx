@@ -5,6 +5,7 @@ import React, {
   Fragment,
   memo,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -527,16 +528,28 @@ export const DayView = () => {
 export const WeekView = () => {
   const { startDate, endDate } = useCalendar();
   const t = useT();
+  const [currentLanguage, setCurrentLanguage] = useState(
+    i18next.resolvedLanguage || 'en'
+  );
+
+  useEffect(() => {
+    dayjs.locale(i18next.resolvedLanguage || 'en');
+    const onLanguageChanged = (lng: string) => {
+      dayjs.locale(lng);
+      setCurrentLanguage(lng);
+    };
+    i18next.on('languageChanged', onLanguageChanged);
+    return () => {
+      i18next.off('languageChanged', onLanguageChanged);
+    };
+  }, []);
 
   // Use dayjs to get localized day names
   const localizedDays = useMemo(() => {
-    const currentLanguage = i18next.resolvedLanguage || 'en';
-    dayjs.locale(currentLanguage);
-
     const days = [];
     const weekStart = newDayjs(startDate);
     for (let i = 0; i < 7; i++) {
-      const day = weekStart.add(i, 'day');
+      const day = weekStart.add(i, 'day').locale(currentLanguage);
       days.push({
         name: day.format('dddd'),
         day: day.format('L'),
@@ -544,7 +557,7 @@ export const WeekView = () => {
       });
     }
     return days;
-  }, [i18next.resolvedLanguage, startDate]);
+  }, [currentLanguage, startDate]);
 
   return (
     <div className="flex flex-col text-textColor flex-1">
@@ -600,22 +613,34 @@ export const WeekView = () => {
 export const MonthView = () => {
   const { startDate } = useCalendar();
   const t = useT();
+  const [currentLanguage, setCurrentLanguage] = useState(
+    i18next.resolvedLanguage || 'en'
+  );
+
+  useEffect(() => {
+    dayjs.locale(i18next.resolvedLanguage || 'en');
+    const onLanguageChanged = (lng: string) => {
+      dayjs.locale(lng);
+      setCurrentLanguage(lng);
+    };
+    i18next.on('languageChanged', onLanguageChanged);
+    return () => {
+      i18next.off('languageChanged', onLanguageChanged);
+    };
+  }, []);
 
   // Use dayjs to get localized day names
   const localizedDays = useMemo(() => {
-    const currentLanguage = i18next.resolvedLanguage || 'en';
-    dayjs.locale(currentLanguage);
-
     const days = [];
     // Starting from Monday (1) to Sunday (7)
     for (let i = 1; i <= 7; i++) {
       days.push({
-        name: newDayjs().day(i).format('dddd'),
-        short: newDayjs().day(i).format('ddd'),
+        name: newDayjs().day(i).locale(currentLanguage).format('dddd'),
+        short: newDayjs().day(i).locale(currentLanguage).format('ddd'),
       });
     }
     return days;
-  }, [i18next.resolvedLanguage]);
+  }, [currentLanguage]);
 
   const calendarDays = useMemo(() => {
     const monthStart = newDayjs(startDate);
