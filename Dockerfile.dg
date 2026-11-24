@@ -61,7 +61,7 @@ RUN addgroup --system www \
  && mkdir -p /www \
  && chown -R www:www /www /var/lib/nginx
 
-RUN npm --no-update-notifier --no-fund --global install pnpm@10.6.1 pm2
+RUN npm --no-update-notifier --no-fund --global install pnpm@10.6.1 pm2 prisma@6.5.0
 
 WORKDIR /app
 
