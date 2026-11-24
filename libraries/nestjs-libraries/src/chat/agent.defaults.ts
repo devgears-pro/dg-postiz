@@ -377,6 +377,16 @@ export async function loadAgentDefaults(
     Boolean(langfusePublicKeyEnv && env[langfusePublicKeyEnv]?.trim()) &&
     Boolean(langfuseSecretKeyEnv && env[langfuseSecretKeyEnv]?.trim());
   const langfuseConfigured = langfuseCredentialConfigured;
+  const langfuseCaptureContentEnv =
+    env.LANGFUSE_CAPTURE_CONTENT ?? env.POSTIZ_AI_LANGFUSE_CAPTURE_CONTENT;
+  const captureContentFromEnv =
+    typeof langfuseCaptureContentEnv === 'string'
+      ? langfuseCaptureContentEnv.trim().toLowerCase() === 'true'
+      : undefined;
+  const captureContent =
+    config.langfuse?.captureContent ??
+    captureContentFromEnv ??
+    langfuseCredentialConfigured;
 
   const builtinTools = config.builtinTools ?? catalog;
   const allowedBuiltinTools = config.allowedBuiltinTools ?? catalog;
@@ -418,7 +428,7 @@ export async function loadAgentDefaults(
       publicKeyEnv: langfusePublicKeyEnv,
       secretKeyEnv: langfuseSecretKeyEnv,
       allowedBaseUrls: config.langfuse?.allowedBaseUrls ?? (langfuseBaseUrl ? [langfuseBaseUrl] : []),
-      captureContent: config.langfuse?.captureContent ?? false,
+      captureContent,
       langfuseCredentialConfigured,
     },
     sources,
@@ -437,7 +447,7 @@ export async function loadAgentDefaults(
         enabled: langfuseEnabled,
         baseUrl: langfuseBaseUrl,
         allowedBaseUrls: config.langfuse?.allowedBaseUrls,
-        captureContent: config.langfuse?.captureContent,
+        captureContent,
       },
     }),
   };
