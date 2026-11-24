@@ -72,11 +72,8 @@ export class AgentObservabilityService implements OnApplicationShutdown {
     this._registry = new Observability({
       configs: configs as never,
       configSelector: ({ requestContext }) => {
-        const raw =
-          requestContext && typeof requestContext.getRaw === 'function'
-            ? requestContext.getRaw('agentObservabilityKey')
-            : undefined;
-        const key = typeof raw === 'string' ? raw : undefined;
+        const rawKey = requestContext?.getRaw('agentObservabilityKey');
+        const key = typeof rawKey === 'string' ? rawKey : undefined;
         if (!key || !this._registry?.hasInstance(key)) return 'disabled';
         return key;
       },
