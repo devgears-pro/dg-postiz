@@ -72,7 +72,7 @@ export const AgentSettings: FC = () => {
     );
   }
 
-  const isSuperAdmin = Boolean(user?.admin || user?.isSuperAdmin);
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
 
   return (
     <AgentSettingsForm

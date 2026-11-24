@@ -21,7 +21,7 @@ import {
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useWaitForClass } from '@gitroom/helpers/utils/use.wait.for.class';
 import { MultiMediaComponent } from '@gitroom/frontend/components/media/media.component';
-import { Integration } from '@prisma/client';
+import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
@@ -63,12 +63,12 @@ export const MediaPortal: FC<{
   );
 };
 
-export const AgentList: FC<{ onChange: (arr: string[]) => void }> = ({
+export const AgentList: FC<{ onChange: (arr: Integrations[]) => void }> = ({
   onChange,
 }) => {
   const fetch = useFetch();
   const t = useT();
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<Integrations[]>([]);
 
   const load = useCallback(async () => {
     return (await (await fetch('/integrations/list')).json()).integrations;
@@ -87,7 +87,7 @@ export const AgentList: FC<{ onChange: (arr: string[]) => void }> = ({
   });
 
   const setIntegration = useCallback(
-    (integration: Integration) => () => {
+    (integration: Integrations) => () => {
       if (selected.some((p) => p.id === integration.id)) {
         onChange(selected.filter((p) => p.id !== integration.id));
         setSelected(selected.filter((p) => p.id !== integration.id));
@@ -226,9 +226,11 @@ export const AgentList: FC<{ onChange: (arr: string[]) => void }> = ({
   );
 };
 
-export const PropertiesContext = createContext({ properties: [] });
+export const PropertiesContext = createContext<{ properties: Integrations[] }>({
+  properties: [],
+});
 export const Agent: FC<{ children: ReactNode }> = ({ children }) => {
-  const [properties, setProperties] = useState([]);
+  const [properties, setProperties] = useState<Integrations[]>([]);
 
   return (
     <PropertiesContext.Provider value={{ properties }}>

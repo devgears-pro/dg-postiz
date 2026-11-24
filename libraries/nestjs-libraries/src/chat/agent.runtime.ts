@@ -41,7 +41,7 @@ export type AgentPrepared = {
   skills: unknown[];
   observabilityKey: string;
   release: () => Promise<void>;
-  applyTo: (requestContext: RequestContext<Record<string, unknown>>) => void;
+  applyTo: (requestContext: RequestContext<any>) => void;
 };
 
 const toInlineSkill = (skill: ResolvedSkill) =>
@@ -77,7 +77,10 @@ export class AgentRuntimeService {
     );
 
     const mcp = options.external
-      ? { tools: {} as Record<string, unknown>, release: async () => undefined }
+      ? {
+          tools: {} as Record<string, unknown>,
+          release: async (): Promise<void> => undefined,
+        }
       : await this._connections.acquireMcp(bundle);
 
     for (const name of Object.keys(mcp.tools)) {
@@ -119,7 +122,7 @@ export class AgentRuntimeService {
   }
 
   async ensurePrepared(
-    requestContext: RequestContext<Record<string, unknown>>
+    requestContext: RequestContext<any>
   ): Promise<AgentPrepared> {
     if (requestContext.get(AGENT_CONTEXT_KEYS.prepared)) {
       return {
@@ -130,7 +133,7 @@ export class AgentRuntimeService {
         skills: requestContext.get(AGENT_CONTEXT_KEYS.skills) ?? [],
         observabilityKey:
           requestContext.get(AGENT_CONTEXT_KEYS.observability) ?? 'disabled',
-        release: async () => undefined,
+        release: async (): Promise<void> => undefined,
         applyTo: () => undefined,
       };
     }

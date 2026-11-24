@@ -7,7 +7,10 @@ import { array, object, string } from 'zod';
 import { ModuleRef } from '@nestjs/core';
 import type { RequestContext } from '@mastra/core/di';
 import { toolList } from '@gitroom/nestjs-libraries/chat/tools/tool.list';
-import { AgentToolInterface } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
+import {
+  AgentToolInterface,
+  type ToolReturn,
+} from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
 import {
   AGENT_RUNTIME,
   type AgentRuntimeLike,
@@ -23,9 +26,9 @@ export const AgentState = object({
 export class LoadToolsService {
   constructor(private _moduleRef: ModuleRef) {}
 
-  async loadTools(mcpOnly = false) {
+  async loadTools(mcpOnly = false): Promise<Record<string, ToolReturn>> {
     return (
-      await Promise.all<{ name: string; tool: unknown }>(
+      await Promise.all<{ name: string; tool: ToolReturn }>(
         toolList
           .map(
             (p) =>
@@ -43,7 +46,7 @@ export class LoadToolsService {
         ...all,
         [current.name]: current.tool,
       }),
-      {} as Record<string, unknown>
+      {} as Record<string, ToolReturn>
     );
   }
 

@@ -20,8 +20,8 @@ export interface SignatureRecord {
 }
 
 export interface SignatureFormValues {
-  content: string;
-  autoAdd: boolean;
+  content?: string;
+  autoAdd?: boolean;
 }
 
 export const SignaturesComponent: FC<{
@@ -186,7 +186,7 @@ const AddOrRemoveSignature: FC<{
   const t = useT();
   const toast = useToaster();
   const fetch = useFetch();
-  const form = useForm<SignatureFormValues>({
+  const form = useForm({
     resolver: yupResolver(details),
     values: {
       content: data?.content || '',

@@ -19,6 +19,8 @@ import {
   providerTestInputSchema,
   resetAgentConfigSchema,
   updateAgentMemorySchema,
+  type AgentConfigOverrides,
+  type AgentConfigView,
   type AgentConfigWriteRequest,
   type McpTestInput,
   type ProviderTestInput,
@@ -42,7 +44,7 @@ export class AgentConfigController {
   async get(
     @GetOrgFromRequest() organization: Organization,
     @GetUserFromRequest() user: User
-  ) {
+  ): Promise<AgentConfigView> {
     const view = await this._agentConfigService.getView(organization.id);
     if (!user?.isSuperAdmin) {
       return {
@@ -91,10 +93,16 @@ export class AgentConfigController {
       );
     }
 
+    const writeData: AgentConfigWriteRequest = {
+      expectedRevision: parsed.data.expectedRevision ?? 0,
+      overrides: parsed.data.overrides as AgentConfigOverrides,
+      secrets: parsed.data.secrets,
+    };
+
     return this._agentConfigService.save(
       organization.id,
       user?.id ?? null,
-      parsed.data
+      writeData
     );
   }
 

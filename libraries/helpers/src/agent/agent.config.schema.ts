@@ -13,7 +13,12 @@ export const AGENT_CONFIG_LIMITS = {
   maxOutputTokens: 200_000,
 } as const;
 
-export type ConfigSource = 'builtin' | 'env' | 'file' | 'organization';
+export type ConfigSource =
+  | 'builtin'
+  | 'env'
+  | 'file'
+  | 'organization'
+  | 'hidden';
 
 export type SkillDefinition = {
   name: string;
@@ -38,7 +43,7 @@ export type GenerationSettings = {
 
 export type AgentConfigOverrides = {
   systemPrompt?: string;
-  provider?: { baseUrl: string };
+  provider?: { baseUrl?: string };
   model?: string;
   titleModel?: string;
   builtinTools?: string[];
@@ -285,7 +290,11 @@ export const agentConfigWriteRequestSchema = z
   })
   .strict();
 
-export type AgentConfigWriteRequest = z.infer<typeof agentConfigWriteRequestSchema>;
+export type AgentConfigWriteRequest = {
+  expectedRevision: number;
+  overrides: AgentConfigOverrides;
+  secrets?: SecretChanges;
+};
 
 export const resetAgentConfigSchema = z
   .object({

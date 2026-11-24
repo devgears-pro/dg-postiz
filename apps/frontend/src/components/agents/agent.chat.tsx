@@ -31,6 +31,7 @@ import { useParams } from 'next/navigation';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import {
   Message as CopilotMessage,
+  MessageRole,
   TextMessage,
 } from '@copilotkit/runtime-client-gql';
 import { AddEditModal } from '@gitroom/frontend/components/new-launch/add.edit.modal';
@@ -131,6 +132,11 @@ const LoadMessages: FC<{ id: string }> = ({ id }) => {
         };
         role: 'user' | 'assistant' | 'system';
       }
+      const toRole = (role: 'user' | 'assistant' | 'system'): MessageRole => {
+        if (role === 'assistant') return MessageRole.Assistant;
+        if (role === 'system') return MessageRole.System;
+        return MessageRole.User;
+      };
       const list = ((data.messages as RawMessageItem[]) || []).map((p) => {
         return new TextMessage({
           content:
@@ -138,7 +144,7 @@ const LoadMessages: FC<{ id: string }> = ({ id }) => {
             (p.content.parts || [])
               .map((part) => (part.type === 'text' ? part.text || '' : ''))
               .join(''),
-          role: p.role,
+          role: toRole(p.role),
         });
       });
 
@@ -410,7 +416,7 @@ const OpenModal: FC<{
     list: {
       integrationId: string;
       date: string;
-      settings?: Record<string, unknown>;
+      settings?: object;
       posts: { content: string; attachments: { id: string; path: string }[] }[];
     }[];
   };

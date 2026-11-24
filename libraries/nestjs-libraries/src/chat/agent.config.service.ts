@@ -33,6 +33,7 @@ import {
 import {
   AgentConfigRepository,
   type AgentConfigRecord,
+  type AgentConfigWrite,
 } from '@gitroom/nestjs-libraries/database/prisma/agent-config/agent.config.repository';
 import {
   AGENT_DEFAULTS,
@@ -225,7 +226,7 @@ export class AgentConfigService {
       );
     }
 
-    const write = {
+    const write: Omit<AgentConfigWrite, 'organizationId'> = {
       overrides: {},
       encryptedSecrets: null,
       secretSummary: emptySummary(),
