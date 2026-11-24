@@ -1,0 +1,68 @@
+# DevGears multi-stage build for Postiz. Upstream reference: Dockerfile.dev
+
+FROM node:22.23.4-bookworm-slim AS builder
+
+ARG NEXT_PUBLIC_VERSION
+ENV NEXT_PUBLIC_VERSION=$NEXT_PUBLIC_VERSION
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    g++ \
+    make \
+    python3-pip \
+    bash \
+&& rm -rf /var/lib/apt/lists/*
+
+RUN npm --no-update-notifier --no-fund --global install pnpm@10.6.1
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/extension/package.json ./apps/extension/
+COPY apps/frontend/package.json ./apps/frontend/
+COPY apps/backend/package.json ./apps/backend/
+COPY apps/sdk/package.json ./apps/sdk/
+COPY apps/commands/package.json ./apps/commands/
+COPY apps/orchestrator/package.json ./apps/orchestrator/
+
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --ignore-scripts
+
+COPY . .
+
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm run prisma-generate
+
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    --mount=type=cache,id=next-cache,target=/app/apps/frontend/.next/cache \
+    NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
+
+RUN rm -rf apps/frontend/.next/cache \
+    && rm -rf /root/.local/share/pnpm \
+    && rm -rf /root/.cache \
+    && rm -rf /tmp/*
+
+FROM node:22.23.4-bookworm-slim AS runner
+
+ARG NEXT_PUBLIC_VERSION
+ENV NEXT_PUBLIC_VERSION=$NEXT_PUBLIC_VERSION \
+    NODE_ENV=production
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    nginx \
+    openssl \
+&& rm -rf /var/lib/apt/lists/*
+
+RUN addgroup --system www \
+ && adduser --system --ingroup www --home /www --shell /usr/sbin/nologin www \
+ && mkdir -p /www \
+ && chown -R www:www /www /var/lib/nginx
+
+RUN npm --no-update-notifier --no-fund --global install pnpm@10.6.1 pm2
+
+WORKDIR /app
+
+COPY --from=builder /app /app
+COPY var/docker/nginx.conf /etc/nginx/nginx.conf
+
+CMD ["sh", "-c", "nginx && pnpm run pm2"]
