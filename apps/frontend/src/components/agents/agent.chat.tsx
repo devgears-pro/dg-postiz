@@ -211,7 +211,7 @@ const Message: FC<UserMessageProps> = (props) => {
       .replace(/\[\-\-Media\-\-\](.*)\[\-\-Media\-\-\]/g, (match, p1) => {
         return `<div class="flex justify-center mt-[20px]">${p1}</div>`;
       })
-      .replace(/\[\-\-Docs\-\-\]([\s\S]*?)\[\-\-Docs\-\-\]/g, (match, p1) => {
+      .replace(/\[\-\-Docs\-\-\]([\s\S]*?)\[\-\-Docs\-\-\]/g, (_match, p1) => {
         const escaped = String(p1)
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
