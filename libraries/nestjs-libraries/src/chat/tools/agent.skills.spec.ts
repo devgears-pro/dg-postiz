@@ -18,6 +18,7 @@ const mockDefaults: SystemAgentDefaults = {
   prompt: 'System prompt',
   model: 'gpt-4o',
   titleModel: 'gpt-4o-mini',
+  imageModel: 'chatgpt-image-latest',
   providerBaseUrl: 'https://api.openai.com/v1',
   providerApiKeyEnv: 'OPENAI_API_KEY',
   builtinTools: ['skillSaveTool', 'skillRemoveTool', 'skillsListTool'],
@@ -36,6 +37,7 @@ const mockDefaults: SystemAgentDefaults = {
   },
   mcpServers: {},
   generation: {},
+  capabilities: { imageRead: true, imageGenerate: false },
   langfuse: {
     enabled: false,
     allowedBaseUrls: [],

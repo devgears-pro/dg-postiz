@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createOpenAI } from '@ai-sdk/openai';
+import OpenAI from 'openai';
 import type {
   McpTestInput,
   ProviderTestInput,
@@ -250,6 +251,26 @@ export class AgentConnectionsService {
       };
     } finally {
       await client.disconnect().catch(() => undefined);
+    }
+  }
+
+  createOpenAIClient(bundle: ResolvedAgentBundle): OpenAI {
+    return new OpenAI({
+      baseURL: withoutTrailingSlash(bundle.config.provider.baseUrl),
+      apiKey: this.providerApiKey(bundle),
+      timeout: 180_000,
+      maxRetries: 0,
+      ...(this.isTrustedProvider(bundle)
+        ? {}
+        : { fetch: guardedFetch() }),
+    });
+  }
+
+  hasProviderCredential(bundle: ResolvedAgentBundle): boolean {
+    try {
+      return Boolean(this.providerApiKey(bundle));
+    } catch {
+      return false;
     }
   }
 

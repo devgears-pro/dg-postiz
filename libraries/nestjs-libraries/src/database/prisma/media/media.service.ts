@@ -4,6 +4,7 @@ import { OpenaiService } from '@gitroom/nestjs-libraries/openai/openai.service';
 import { generationError } from '@gitroom/nestjs-libraries/openai/generation.error';
 import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { Organization } from '@prisma/client';
+import OpenAI from 'openai';
 import { SaveMediaInformationDto } from '@gitroom/nestjs-libraries/dtos/media/save.media.information.dto';
 import { VideoManager } from '@gitroom/nestjs-libraries/videos/video.manager';
 import { VideoDto } from '@gitroom/nestjs-libraries/dtos/videos/video.dto';
@@ -105,7 +106,12 @@ export class MediaService {
   async generateImage(
     prompt: string,
     org: Organization,
-    generatePromptFirst?: boolean
+    generatePromptFirst?: boolean,
+    options?: {
+      client: OpenAI;
+      promptModel: string;
+      imageModel: string;
+    }
   ) {
     try {
       const generating = await this._subscriptionService.useCredit(
@@ -113,10 +119,23 @@ export class MediaService {
         'ai_images',
         async () => {
           if (generatePromptFirst) {
-            prompt = await this._openAi.generatePromptForPicture(prompt);
-            console.log('Prompt:', prompt);
+            const rewritten = await this._openAi
+              .generatePromptForPicture(
+                prompt,
+                options?.client,
+                options?.promptModel
+              )
+              .catch(() => '');
+            if (rewritten) {
+              prompt = rewritten;
+            }
           }
-          return this._openAi.generateImage(prompt);
+          return this._openAi.generateImage(
+            prompt,
+            false,
+            options?.client,
+            options?.imageModel
+          );
         }
       );
 

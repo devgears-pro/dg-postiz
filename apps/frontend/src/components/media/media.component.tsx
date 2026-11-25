@@ -58,6 +58,18 @@ import { useDebounce } from 'use-debounce';
 const Polonto = dynamic(
   () => import('@gitroom/frontend/components/launches/polonto')
 );
+const useImageGeneration = () => {
+  const user = useUser();
+  const fetch = useFetch();
+  const { data } = useSWR(
+    user?.tier?.ai ? ['media-image-generation', user.orgId] : null,
+    async () => {
+      const response = await fetch('/media/image-generation');
+      return response.ok ? response.json() : { enabled: false };
+    }
+  );
+  return data?.enabled === true;
+};
 const showModalEmitter = new EventEmitter();
 // on phones the media library takes the whole screen
 export const mediaLibrarySize = () =>
@@ -795,6 +807,7 @@ export const MultiMediaComponent: FC<{
   const { plontoKey } = useVariables();
   const modals = useModals();
   const t = useT();
+  const imageGenerationEnabled = useImageGeneration();
   useEffect(() => {
     if (value) {
       setCurrentMedia(value);
@@ -998,7 +1011,9 @@ export const MultiMediaComponent: FC<{
 
                 {!!user?.tier?.ai && (
                   <>
-                    <AiImage value={text} onChange={changeMedia} />
+                    {imageGenerationEnabled && (
+                      <AiImage value={text} onChange={changeMedia} />
+                    )}
                     {!insertInContent && (
                       <AiVideo value={text} onChange={changeMedia} />
                     )}

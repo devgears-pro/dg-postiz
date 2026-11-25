@@ -123,8 +123,13 @@ export const setProvider = (
   baseUrl: string
 ): AgentConfigOverrides => {
   const next = { ...overrides };
-  if (!baseUrl.trim()) delete next.provider;
-  else next.provider = { baseUrl: baseUrl.trim() };
+  if (!baseUrl.trim()) {
+    delete next.provider;
+    delete next.capabilities;
+    delete next.imageModel;
+  } else {
+    next.provider = { baseUrl: baseUrl.trim() };
+  }
   return next;
 };
 

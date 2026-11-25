@@ -28,7 +28,16 @@ const setup = (
     }),
   };
   const mediaService = { getMediaStatus: vi.fn().mockResolvedValue(row) };
-  const tool = new InspectImageTool(mediaService as never, messaging as never);
+  const agentConfig = {
+    resolve: vi.fn().mockResolvedValue({
+      config: { capabilities: { imageRead: true, imageGenerate: false } },
+    }),
+  };
+  const tool = new InspectImageTool(
+    mediaService as never,
+    agentConfig as never,
+    messaging as never
+  );
   return { tool, mediaService, sendMessage };
 };
 

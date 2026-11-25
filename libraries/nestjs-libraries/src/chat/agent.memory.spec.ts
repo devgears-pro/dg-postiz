@@ -14,6 +14,7 @@ const mockDefaults: SystemAgentDefaults = {
   prompt: 'Default system prompt',
   model: 'gpt-5.2',
   titleModel: 'gpt-5.2',
+  imageModel: 'chatgpt-image-latest',
   providerBaseUrl: 'https://api.openai.com/v1',
   builtinTools: ['postsListTool'],
   allowedBuiltinTools: ['postsListTool'],
@@ -26,6 +27,7 @@ const mockDefaults: SystemAgentDefaults = {
   },
   mcpServers: {},
   generation: {},
+  capabilities: { imageRead: true, imageGenerate: false },
   langfuse: {
     enabled: false,
     allowedBaseUrls: [],

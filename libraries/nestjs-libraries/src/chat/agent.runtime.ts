@@ -75,8 +75,18 @@ export class AgentRuntimeService {
 
     const allTools = await this._loadTools.loadTools();
     const enabled = new Set(bundle.config.builtinTools);
+    const disabledByCapability = new Set<string>();
+    if (!bundle.config.capabilities.imageRead) {
+      disabledByCapability.add('inspectImage');
+    }
+    if (!bundle.config.capabilities.imageGenerate) {
+      disabledByCapability.add('generateImageTool');
+    }
     const builtinTools = Object.fromEntries(
-      Object.entries(allTools).filter(([name]) => enabled.has(name))
+      Object.entries(allTools).filter(
+        ([name]) =>
+          enabled.has(name) && !disabledByCapability.has(name)
+      )
     );
 
     const mcp = options.external

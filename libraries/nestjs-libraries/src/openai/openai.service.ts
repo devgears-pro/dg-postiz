@@ -75,13 +75,18 @@ Clips must not overlap. Write the title and the post in this language, whatever 
     return clips;
   }
 
-  async generateImage(prompt: string, isVertical = false) {
+  async generateImage(
+    prompt: string,
+    isVertical = false,
+    client: OpenAI = openai,
+    model = 'chatgpt-image-latest'
+  ) {
     // gpt-image models always return base64 (b64_json) and do not accept the
     // `response_format` parameter, unlike the deprecated dall-e-3.
     const generate = (
-      await openai.images.generate({
+      await client.images.generate({
         prompt,
-        model: 'chatgpt-image-latest',
+        model,
         size: isVertical ? '1024x1536' : '1024x1024',
       })
     ).data[0];
@@ -93,11 +98,15 @@ Clips must not overlap. Write the title and the post in this language, whatever 
     return generate.b64_json;
   }
 
-  async generatePromptForPicture(prompt: string) {
+  async generatePromptForPicture(
+    prompt: string,
+    client: OpenAI = openai,
+    model = 'gpt-6.2-sol'
+  ) {
     return (
       (
-        await openai.chat.completions.parse({
-          model: 'gpt-6.2-sol',
+        await client.chat.completions.parse({
+          model,
           messages: [
             {
               role: 'system',
