@@ -1017,5 +1017,13 @@
   "add_signature": "Add Signature",
   "signature_deleted": "Signature deleted successfully",
   "signature_updated": "Signature updated successfully",
-  "signature_added": "Signature added successfully"
+  "signature_added": "Signature added successfully",
+  "ai_credits": "AI Credits",
+  "add_credits": "Add Credits",
+  "add_video_credits": "Add video credits",
+  "add_image_credits": "Add image credits",
+  "granted_video_credits": "Video credits granted this period:",
+  "granted_image_credits": "Image credits granted this period:",
+  "credits_granted": "Credits added",
+  "could_not_grant_credits": "Could not add the credits"
 }

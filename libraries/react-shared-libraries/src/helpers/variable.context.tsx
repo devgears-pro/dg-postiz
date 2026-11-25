@@ -28,7 +28,6 @@ interface VariableContextInterface {
   disableXAnalytics: boolean;
   language: string;
   dub: boolean;
-  transloadit: string[];
   mediaProcessing: boolean;
   sentryDsn: string;
   extensionId: string;
@@ -65,7 +64,6 @@ const VariableContext = createContext({
   disableXAnalytics: false,
   language: '',
   dub: false,
-  transloadit: [],
   mediaProcessing: false,
   sentryDsn: '',
   extensionId: '',
