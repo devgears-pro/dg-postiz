@@ -18,6 +18,7 @@ import {
 const DEFAULT_MODEL = 'gpt-5.2';
 const DEFAULT_PROVIDER_BASE_URL = 'https://api.openai.com/v1';
 const DEFAULT_TITLE_MODEL = DEFAULT_MODEL;
+const DEFAULT_IMAGE_MODEL = 'chatgpt-image-latest';
 
 export type AgentEnv = Readonly<Record<string, string | undefined>>;
 
@@ -50,6 +51,7 @@ const rootAgentConfigSchema = z
     skills: z.array(z.string().min(1).max(300)).max(64).optional(),
     model: z.string().min(1).max(200).optional(),
     titleModel: z.string().min(1).max(200).optional(),
+    imageModel: z.string().min(1).max(200).optional(),
     provider: z
       .object({
         baseUrl: httpsUrl,
@@ -311,6 +313,18 @@ export async function loadAgentDefaults(
     config.titleModel ??
     env.POSTIZ_AI_TITLE_MODEL?.trim() ??
     (config.model || env.POSTIZ_AI_MODEL ? model : DEFAULT_TITLE_MODEL);
+  const imageModel =
+    config.imageModel ??
+    env.POSTIZ_AI_IMAGE_MODEL?.trim() ??
+    DEFAULT_IMAGE_MODEL;
+  const capabilities = {
+    imageRead: !['false', '0', 'no', 'off'].includes(
+      env.POSTIZ_AI_IMAGE_READ?.trim().toLowerCase() ?? ''
+    ),
+    imageGenerate: ['true', '1', 'yes', 'on'].includes(
+      env.POSTIZ_AI_IMAGE_GENERATE?.trim().toLowerCase() ?? ''
+    ),
+  };
 
   const providerBaseUrl = trimTrailingSlash(
     config.provider?.baseUrl ??
@@ -406,6 +420,7 @@ export async function loadAgentDefaults(
     prompt: prompt.prompt,
     model,
     titleModel,
+    imageModel,
     providerBaseUrl,
     providerApiKeyEnv,
     providerCredentialConfigured,
@@ -414,6 +429,7 @@ export async function loadAgentDefaults(
     skills,
     mcpServers,
     generation: cleanGeneration,
+    capabilities,
     langfuse: {
       enabled: langfuseEnabled,
       baseUrl: langfuseBaseUrl || undefined,
@@ -428,6 +444,7 @@ export async function loadAgentDefaults(
       prompt: prompt.prompt,
       model,
       titleModel,
+      imageModel,
       providerBaseUrl,
       providerApiKeyEnv,
       builtinTools,
@@ -435,6 +452,7 @@ export async function loadAgentDefaults(
       skills,
       mcpServers,
       generation: cleanGeneration,
+      capabilities,
       langfuse: {
         enabled: langfuseEnabled,
         baseUrl: langfuseBaseUrl,

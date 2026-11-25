@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -25,6 +26,8 @@ import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { SaveMediaInformationDto } from '@gitroom/nestjs-libraries/dtos/media/save.media.information.dto';
 import { VideoDto } from '@gitroom/nestjs-libraries/dtos/videos/video.dto';
 import { VideoFunctionDto } from '@gitroom/nestjs-libraries/dtos/videos/video.function.dto';
+import { AgentConfigService } from '@gitroom/nestjs-libraries/chat/agent.config.service';
+import { AgentConnectionsService } from '@gitroom/nestjs-libraries/chat/agent.connections';
 
 @ApiTags('Media')
 @Controller('/media')
@@ -32,8 +35,40 @@ export class MediaController {
   private storage = UploadFactory.createStorage();
   constructor(
     private _mediaService: MediaService,
-    private _subscriptionService: SubscriptionService
+    private _subscriptionService: SubscriptionService,
+    private _agentConfigService: AgentConfigService,
+    private _connections: AgentConnectionsService
   ) {}
+
+  private async imageGenerationOptions(org: Organization) {
+    const bundle = await this._agentConfigService.resolve(org.id);
+    if (!bundle.config.capabilities.imageGenerate) {
+      throw new ForbiddenException(
+        'Image generation is disabled for this organization'
+      );
+    }
+    if (!this._connections.hasProviderCredential(bundle)) {
+      throw new ForbiddenException(
+        'The organization provider API key is not configured'
+      );
+    }
+
+    return {
+      client: this._connections.createOpenAIClient(bundle),
+      promptModel: bundle.config.model,
+      imageModel: bundle.config.imageModel,
+    };
+  }
+
+  @Get('/image-generation')
+  async imageGeneration(@GetOrgFromRequest() org: Organization) {
+    const bundle = await this._agentConfigService.resolve(org.id);
+    return {
+      enabled:
+        bundle.config.capabilities.imageGenerate &&
+        this._connections.hasProviderCredential(bundle),
+    };
+  }
 
   @Delete('/:id')
   deleteMedia(@GetOrgFromRequest() org: Organization, @Param('id') id: string) {
@@ -56,6 +91,7 @@ export class MediaController {
     @Body('prompt') prompt: string,
     isPicturePrompt = false
   ) {
+    const options = await this.imageGenerationOptions(org);
     const total = await this._subscriptionService.checkCredits(org);
     if (process.env.STRIPE_PUBLISHABLE_KEY && total.credits <= 0) {
       return false;
@@ -64,7 +100,12 @@ export class MediaController {
     return {
       output:
         'data:image/png;base64,' +
-        (await this._mediaService.generateImage(prompt, org, isPicturePrompt)),
+        (await this._mediaService.generateImage(
+          prompt,
+          org,
+          isPicturePrompt,
+          options
+        )),
     };
   }
 

@@ -958,6 +958,8 @@
   "agent_provider_failed": "The provider did not answer.",
   "agent_key_saved": "Key saved",
   "agent_key_missing": "Key missing",
+  "agent_image_read": "Reads images",
+  "agent_image_generate": "Generates images",
   "agent_max_steps": "Max steps",
   "agent_test": "Test",
   "agent_tools_title": "Built-in tools",

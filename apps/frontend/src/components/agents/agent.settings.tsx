@@ -97,6 +97,9 @@ const AgentSettingsForm: FC<{
   const providerValue =
     overrides.provider?.baseUrl ?? view?.defaults.provider.baseUrl ?? '';
   const providerOverridden = overrides.provider !== undefined;
+  const imageGenerate =
+    overrides.capabilities?.imageGenerate ??
+    view.defaults.capabilities.imageGenerate;
 
   const builtinSelected = new Set(
     overrides.builtinTools ?? view.effective.builtinTools ?? []
@@ -323,6 +326,55 @@ const AgentSettingsForm: FC<{
             }
           />
         </div>
+        <div className="flex flex-wrap items-center gap-[16px] text-[14px]">
+          {(
+            [
+              ['imageRead', 'agent_image_read', 'Reads images'],
+              ['imageGenerate', 'agent_image_generate', 'Generates images'],
+            ] as const
+          ).map(([key, label, fallback]) => (
+            <label
+              key={key}
+              className={`flex items-center gap-[6px] ${
+                providerOverridden ? '' : 'opacity-60'
+              }`}
+            >
+              <input
+                type="checkbox"
+                disabled={!providerOverridden}
+                checked={
+                  overrides.capabilities?.[key] ??
+                  view.defaults.capabilities[key]
+                }
+                onChange={(event) =>
+                  setOverrides({
+                    ...overrides,
+                    capabilities: {
+                      ...(overrides.capabilities ?? {}),
+                      [key]: event.target.checked,
+                    },
+                  })
+                }
+              />
+              {t(label, fallback)}
+            </label>
+          ))}
+        </div>
+        {providerOverridden && imageGenerate && (
+          <input
+            className={inputClass}
+            value={overrides.imageModel ?? ''}
+            placeholder={view.defaults.imageModel}
+            onChange={(event) =>
+              setOverrides({
+                ...overrides,
+                ...(event.target.value
+                  ? { imageModel: event.target.value }
+                  : { imageModel: undefined }),
+              })
+            }
+          />
+        )}
         <div className="flex items-center gap-[8px]">
           <input
             type="number"

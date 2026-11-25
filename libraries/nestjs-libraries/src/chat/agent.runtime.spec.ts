@@ -19,6 +19,7 @@ const buildDefaults = (): SystemAgentDefaults => ({
   prompt: 'System prompt',
   model: 'gpt-5.2',
   titleModel: 'gpt-5.2',
+  imageModel: 'chatgpt-image-latest',
   providerBaseUrl: 'https://api.openai.com/v1',
   providerApiKeyEnv: 'OPENAI_API_KEY',
   builtinTools: [],
@@ -26,6 +27,7 @@ const buildDefaults = (): SystemAgentDefaults => ({
   skills: {},
   mcpServers: {},
   generation: {},
+  capabilities: { imageRead: true, imageGenerate: false },
   langfuse: {
     enabled: true,
     baseUrl: 'https://langfuse.example.test',
@@ -46,11 +48,13 @@ const buildBundle = (): ResolvedAgentBundle => ({
     defaultsVersion: 'test-defaults-v1',
     model: 'gpt-5.2',
     titleModel: 'gpt-5.2',
+    imageModel: 'chatgpt-image-latest',
     provider: {
       baseUrl: 'https://api.openai.com/v1',
       credential: 'system',
     },
     builtinTools: [],
+    capabilities: { imageRead: true, imageGenerate: false },
     skills: [],
     mcpServers: [],
     generation: {},
@@ -65,9 +69,19 @@ const buildBundle = (): ResolvedAgentBundle => ({
   defaults: buildDefaults(),
 });
 
-const buildRuntime = () => {
+const buildRuntime = (options?: {
+  tools?: Record<string, unknown>;
+  builtinTools?: string[];
+  capabilities?: { imageRead: boolean; imageGenerate: boolean };
+}) => {
+  const bundle = buildBundle();
+  bundle.config.builtinTools = options?.builtinTools ?? [];
+  if (options?.capabilities) {
+    bundle.config.capabilities = options.capabilities;
+  }
+
   const configService = {
-    resolve: async () => buildBundle(),
+    resolve: async () => bundle,
   } as unknown as AgentConfigService;
   const connections = {
     createModel: () => ({}),
@@ -78,7 +92,7 @@ const buildRuntime = () => {
     }),
   } as unknown as AgentConnectionsService;
   const loadTools = {
-    loadTools: async () => ({}),
+    loadTools: async () => options?.tools ?? {},
   } as unknown as LoadToolsService;
   const observability = {
     prepare: () => 'system',
@@ -122,5 +136,44 @@ describe('AgentRuntimeService trace context', () => {
     prepared.applyTo(requestContext);
 
     expect(requestContext.getRaw('client')).toBe('ui');
+  });
+});
+
+describe('AgentRuntimeService image capabilities', () => {
+  const tools = {
+    inspectImage: {},
+    generateImageTool: {},
+    postsListTool: {},
+  };
+  const builtinTools = ['inspectImage', 'generateImageTool', 'postsListTool'];
+
+  it('[TC-2-18-1] drops the image tools when both capabilities are disabled', async () => {
+    const runtime = buildRuntime({
+      tools,
+      builtinTools,
+      capabilities: { imageRead: false, imageGenerate: false },
+    });
+
+    const prepared = await runtime.prepare('org-test-123', { ui: true });
+
+    expect(Object.keys(prepared.tools).sort()).toEqual(['postsListTool']);
+    await prepared.release();
+  });
+
+  it('[TC-2-18-2] keeps the image tools when both capabilities are enabled', async () => {
+    const runtime = buildRuntime({
+      tools,
+      builtinTools,
+      capabilities: { imageRead: true, imageGenerate: true },
+    });
+
+    const prepared = await runtime.prepare('org-test-123', { ui: true });
+
+    expect(Object.keys(prepared.tools).sort()).toEqual([
+      'generateImageTool',
+      'inspectImage',
+      'postsListTool',
+    ]);
+    await prepared.release();
   });
 });

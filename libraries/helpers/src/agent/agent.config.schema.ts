@@ -40,14 +40,21 @@ export type GenerationSettings = {
   temperature?: number;
 };
 
+export type AgentCapabilities = {
+  imageRead: boolean;
+  imageGenerate: boolean;
+};
+
 export type AgentConfigOverrides = {
   provider?: { baseUrl?: string };
   model?: string;
   titleModel?: string;
+  imageModel?: string;
   builtinTools?: string[];
   skills?: Record<string, SkillDefinition | null>;
   mcpServers?: Record<string, McpServerDefinition | null>;
   generation?: GenerationSettings;
+  capabilities?: Partial<AgentCapabilities>;
 };
 
 export type SecretChanges = {
@@ -63,6 +70,7 @@ export type SystemAgentDefaults = {
   prompt: string;
   model: string;
   titleModel: string;
+  imageModel: string;
   providerBaseUrl: string;
   providerApiKeyEnv?: string;
   providerCredentialConfigured?: boolean;
@@ -71,6 +79,7 @@ export type SystemAgentDefaults = {
   skills: Record<string, SkillDefinition>;
   mcpServers: Record<string, SystemMcpServer>;
   generation: GenerationSettings;
+  capabilities: AgentCapabilities;
   langfuse: {
     enabled: boolean;
     baseUrl?: string;
@@ -102,11 +111,13 @@ export type ResolvedAgentConfig = {
   prompt: string;
   model: string;
   titleModel: string;
+  imageModel: string;
   provider: {
     baseUrl: string;
     credential: 'system' | 'organization';
   };
   builtinTools: string[];
+  capabilities: AgentCapabilities;
   skills: ResolvedSkill[];
   mcpServers: ResolvedMcpServer[];
   generation: GenerationSettings;
@@ -133,11 +144,13 @@ export type AgentConfigView = {
     prompt: string;
     model: string;
     titleModel: string;
+    imageModel: string;
     provider: { baseUrl: string };
     builtinTools: string[];
     skills: SkillDefinition[];
     mcpServers: Array<McpServerDefinition & { id: string }>;
     generation: GenerationSettings;
+    capabilities: AgentCapabilities;
   };
   overrides: AgentConfigOverrides;
   effective: {
@@ -253,10 +266,18 @@ export const agentConfigOverridesSchema = z
     provider: z.object({ baseUrl: httpsUrlSchema }).strict().optional(),
     model: modelSchema.optional(),
     titleModel: modelSchema.optional(),
+    imageModel: modelSchema.optional(),
     builtinTools: z.array(z.string().min(1).max(100)).max(64).optional(),
     skills: z.record(slugSchema, skillDefinitionSchema.nullable()).optional(),
     mcpServers: z.record(slugSchema, mcpServerDefinitionSchema.nullable()).optional(),
     generation: generationSettingsSchema.optional(),
+    capabilities: z
+      .object({
+        imageRead: z.boolean().optional(),
+        imageGenerate: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .refine(
@@ -490,6 +511,13 @@ export function resolveAgentConfig(
   const titleModel = overrides.titleModel ?? overrides.model ?? defaults.titleModel;
   const builtinTools = overrides.builtinTools ?? defaults.builtinTools;
   const generation = mergeGeneration(defaults.generation, overrides.generation);
+  const capabilities: AgentCapabilities =
+    overrides.provider && overrides.capabilities
+      ? { ...defaults.capabilities, ...overrides.capabilities }
+      : defaults.capabilities;
+  const imageModel = overrides.provider
+    ? overrides.imageModel ?? defaults.imageModel
+    : defaults.imageModel;
 
   const sources: Record<string, ConfigSource> = {
     prompt: defaults.sources.prompt,
@@ -523,11 +551,13 @@ export function resolveAgentConfig(
     prompt: defaults.prompt,
     model,
     titleModel,
+    imageModel,
     provider: {
       baseUrl: overrides.provider?.baseUrl ?? defaults.providerBaseUrl,
       credential: overrides.provider ? 'organization' : 'system',
     },
     builtinTools,
+    capabilities,
     skills: mergeSkills(defaults, overrides),
     mcpServers: mergeMcpServers(defaults, overrides),
     generation,
@@ -565,11 +595,13 @@ export function toAgentConfigView(
       prompt: defaults.prompt,
       model: defaults.model,
       titleModel: defaults.titleModel,
+      imageModel: defaults.imageModel,
       provider: { baseUrl: defaults.providerBaseUrl },
       builtinTools: [...defaults.builtinTools],
       skills: sharedSkills(defaults),
       mcpServers: sharedMcpServers(defaults),
       generation: { ...defaults.generation },
+      capabilities: { ...defaults.capabilities },
     },
     overrides,
     effective: {

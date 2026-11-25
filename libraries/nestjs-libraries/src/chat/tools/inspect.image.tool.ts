@@ -5,6 +5,7 @@ import { readFile, stat } from 'fs/promises';
 import { z } from 'zod';
 import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
 import { MediaService } from '@gitroom/nestjs-libraries/database/prisma/media/media.service';
+import { AgentConfigService } from '@gitroom/nestjs-libraries/chat/agent.config.service';
 import {
   AGENT_MESSAGING,
   type AgentMessagingLike,
@@ -37,6 +38,7 @@ export class InspectImageTool implements AgentToolInterface {
 
   constructor(
     private _mediaService: MediaService,
+    private _agentConfigService: AgentConfigService,
     @Inject(AGENT_MESSAGING) private _messaging: AgentMessagingLike
   ) {}
 
@@ -83,6 +85,15 @@ The image arrives as a user message; answer after it appears. Do not inspect ima
               : (orgRaw as { id: string } | undefined);
           if (!organization?.id) {
             throw new InspectionError('Organization context is missing.');
+          }
+          const bundle = await this._agentConfigService.resolve(
+            organization.id
+          );
+          if (!bundle.config.capabilities.imageRead) {
+            return {
+              added: false,
+              error: 'Image reading is disabled for this organization.',
+            };
           }
           const threadId =
             ctx?.threadId ??

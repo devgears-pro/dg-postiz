@@ -25,6 +25,7 @@ import { VideoFrame } from '@gitroom/react/helpers/video.frame';
 import { useUppyUploader } from '@gitroom/frontend/components/media/new.uploader';
 import dynamic from 'next/dynamic';
 import { useUser } from '@gitroom/frontend/components/layout/user.context';
+import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { AiImage } from '@gitroom/frontend/components/launches/ai.image';
 import { DropFiles } from '@gitroom/frontend/components/layout/drop.files';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
@@ -57,6 +58,18 @@ import { useDebounce } from 'use-debounce';
 const Polonto = dynamic(
   () => import('@gitroom/frontend/components/launches/polonto')
 );
+const useImageGeneration = () => {
+  const user = useUser();
+  const fetch = useFetch();
+  const { data } = useSWR(
+    user?.tier?.ai ? ['media-image-generation', user.orgId] : null,
+    async () => {
+      const response = await fetch('/media/image-generation');
+      return response.ok ? response.json() : { enabled: false };
+    }
+  );
+  return data?.enabled === true;
+};
 const showModalEmitter = new EventEmitter();
 // on phones the media library takes the whole screen
 export const mediaLibrarySize = () =>
@@ -791,8 +804,10 @@ export const MultiMediaComponent: FC<{
     insertInContent,
   } = props;
   const user = useUser();
+  const { plontoKey } = useVariables();
   const modals = useModals();
   const t = useT();
+  const imageGenerationEnabled = useImageGeneration();
   useEffect(() => {
     if (value) {
       setCurrentMedia(value);
@@ -974,19 +989,21 @@ export const MultiMediaComponent: FC<{
                     </div>
                   </div>
                 </div>
-                <div
-                  onClick={designMedia}
-                  className="cursor-pointer h-[30px] rounded-[6px] justify-center items-center flex bg-newColColor px-[8px] mobile:hidden"
-                >
-                  <div className="flex gap-[5px] items-center">
-                    <div>
-                      <DesignMediaIcon />
-                    </div>
-                    <div className="text-[10px] font-[600] iconBreak:hidden block">
-                      {t('design_media', 'Design Media')}
+                {!!plontoKey && (
+                  <div
+                    onClick={designMedia}
+                    className="cursor-pointer h-[30px] rounded-[6px] justify-center items-center flex bg-newColColor px-[8px] mobile:hidden"
+                  >
+                    <div className="flex gap-[5px] items-center">
+                      <div>
+                        <DesignMediaIcon />
+                      </div>
+                      <div className="text-[10px] font-[600] iconBreak:hidden block">
+                        {t('design_media', 'Design Media')}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {!insertInContent && (
                   <ThirdPartyMedia allData={allData} onChange={changeMedia} />
@@ -994,7 +1011,9 @@ export const MultiMediaComponent: FC<{
 
                 {!!user?.tier?.ai && (
                   <>
-                    <AiImage value={text} onChange={changeMedia} />
+                    {imageGenerationEnabled && (
+                      <AiImage value={text} onChange={changeMedia} />
+                    )}
                     {!insertInContent && (
                       <AiVideo value={text} onChange={changeMedia} />
                     )}
@@ -1060,6 +1079,7 @@ export const MediaComponent: FC<{
     props;
   const { getValues } = useSettings();
   const user = useUser();
+  const { plontoKey } = useVariables();
   useEffect(() => {
     const settings = getValues()[props.name];
     if (settings) {
@@ -1134,12 +1154,14 @@ export const MediaComponent: FC<{
       )}
       <div className="flex gap-[5px]">
         <Button onClick={showModal}>{t('select', 'Select')}</Button>
-        <Button
-          onClick={showDesignModal}
-          className="!bg-customColor45 mobile:hidden"
-        >
-          {t('editor', 'Editor')}
-        </Button>
+        {!!plontoKey && (
+          <Button
+            onClick={showDesignModal}
+            className="!bg-customColor45 mobile:hidden"
+          >
+            {t('editor', 'Editor')}
+          </Button>
+        )}
         <Button secondary={true} onClick={clearMedia}>
           {t('clear', 'Clear')}
         </Button>

@@ -6,6 +6,8 @@ import { MediaService } from '@gitroom/nestjs-libraries/database/prisma/media/me
 import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
 import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { AgentConfigService } from '@gitroom/nestjs-libraries/chat/agent.config.service';
+import { AgentConnectionsService } from '@gitroom/nestjs-libraries/chat/agent.connections';
 
 @Injectable()
 export class GenerateImageTool implements AgentToolInterface {
@@ -13,7 +15,9 @@ export class GenerateImageTool implements AgentToolInterface {
 
   constructor(
     private _mediaService: MediaService,
-    private _subscriptionService: SubscriptionService
+    private _subscriptionService: SubscriptionService,
+    private _agentConfigService: AgentConfigService,
+    private _connections: AgentConnectionsService
   ) {}
   name = 'generateImageTool';
 
@@ -56,9 +60,22 @@ export class GenerateImageTool implements AgentToolInterface {
             };
           }
 
+          const bundle = await this._agentConfigService.resolve(org.id);
+          if (!bundle.config.capabilities.imageGenerate) {
+            return {
+              error: 'Image generation is disabled for this organization.',
+            };
+          }
+
           const image = await this._mediaService.generateImage(
             inputData.prompt,
-            org
+            org,
+            false,
+            {
+              client: this._connections.createOpenAIClient(bundle),
+              promptModel: bundle.config.model,
+              imageModel: bundle.config.imageModel,
+            }
           );
 
           const file = await this.storage.uploadSimple(
