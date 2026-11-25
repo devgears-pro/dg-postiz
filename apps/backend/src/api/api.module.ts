@@ -16,6 +16,8 @@ import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integ
 import { SettingsController } from '@gitroom/backend/api/routes/settings.controller';
 import { PostsController } from '@gitroom/backend/api/routes/posts.controller';
 import { MediaController } from '@gitroom/backend/api/routes/media.controller';
+import { DocsController } from '@gitroom/backend/api/routes/docs.controller';
+import { DocsModule } from '@gitroom/nestjs-libraries/docs/docs.module';
 import { ClippingController } from '@gitroom/backend/api/routes/clipping.controller';
 import { MediaWidgetController } from '@gitroom/backend/api/routes/media.widget.controller';
 import { UploadWidgetAuthMiddleware } from '@gitroom/backend/services/auth/upload.widget.auth.middleware';
@@ -65,6 +67,7 @@ const authenticatedController = [
   SettingsController,
   PostsController,
   MediaController,
+  DocsController,
   ClippingController,
   BillingController,
   NotificationsController,
@@ -82,7 +85,7 @@ const authenticatedController = [
   AdminController,
 ];
 @Module({
-  imports: [UploadModule],
+  imports: [UploadModule, DocsModule],
   controllers: process.env.MCP_ONLY
     ? [
         RootController,

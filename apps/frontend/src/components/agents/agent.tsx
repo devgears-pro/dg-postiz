@@ -21,6 +21,11 @@ import {
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useWaitForClass } from '@gitroom/helpers/utils/use.wait.for.class';
 import { MultiMediaComponent } from '@gitroom/frontend/components/media/media.component';
+import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import {
+  DocsPickerModal,
+  type SelectedDoc,
+} from '@gitroom/frontend/components/docs/docs.picker.modal';
 import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
@@ -28,7 +33,9 @@ import { useT } from '@gitroom/react/translation/get.transation.service.client';
 
 export const MediaPortal: FC<{
   media: { path: string; id: string }[];
+  docs: SelectedDoc[];
   value: string;
+  setDocs: (docs: SelectedDoc[]) => void;
   setMedia: (event: {
     target: {
       name: string;
@@ -41,12 +48,57 @@ export const MediaPortal: FC<{
       }[];
     };
   }) => void;
-}> = ({ media, setMedia, value }) => {
+}> = ({ media, docs, setDocs, setMedia, value }) => {
   const waitForClass = useWaitForClass('copilotKitMessages');
   const t = useT();
+  const modals = useModals();
   if (!waitForClass) return null;
+
+  const openDocsPicker = () => {
+    modals.openModal({
+      title: t('docs', 'Docs'),
+      askClose: false,
+      closeOnEscape: true,
+      children: (close) => (
+        <DocsPickerModal
+          closeModal={close}
+          onSelect={(picked) => {
+            const next = [...docs];
+            for (const doc of picked) {
+              if (!next.some((d) => d.path === doc.path)) {
+                next.push(doc);
+              }
+            }
+            setDocs(next);
+          }}
+        />
+      ),
+    });
+  };
+
   return (
     <div className="pl-[14px] pr-[24px] whitespace-nowrap editor rm-bg max-w-full overflow-x-auto">
+      {docs.length > 0 && (
+        <div className="flex flex-wrap gap-[6px] mb-[6px]">
+          {docs.map((doc) => (
+            <span
+              key={doc.path}
+              className="inline-flex items-center gap-[6px] px-[8px] py-[4px] rounded-[6px] bg-newColColor text-[12px]"
+            >
+              <span>{doc.path}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setDocs(docs.filter((item) => item.path !== doc.path))
+                }
+                className="opacity-70 hover:opacity-100 cursor-pointer"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <MultiMediaComponent
         allData={[{ content: value }]}
         text={value}
@@ -58,6 +110,15 @@ export const MediaPortal: FC<{
         onChange={setMedia}
         onOpen={() => {}}
         onClose={() => {}}
+        toolBar={
+          <button
+            type="button"
+            onClick={openDocsPicker}
+            className="cursor-pointer h-[30px] mobile:h-[40px] rounded-[6px] mobile:rounded-[8px] justify-center items-center flex bg-newColColor mobile:bg-newSettings px-[8px] text-[10px] font-[600]"
+          >
+            {t('add_document', 'Add Document')}
+          </button>
+        }
       />
     </div>
   );

@@ -11,9 +11,11 @@ import { AgentRuntimeService } from '@gitroom/nestjs-libraries/chat/agent.runtim
 import { AGENT_MESSAGING } from '@gitroom/nestjs-libraries/chat/agent.messaging.token';
 import { AGENT_RUNTIME } from '@gitroom/nestjs-libraries/chat/agent.runtime.token';
 import { AGENT_DEFAULTS } from '@gitroom/nestjs-libraries/chat/agent.defaults.token';
+import { DocsModule } from '@gitroom/nestjs-libraries/docs/docs.module';
 
 @Global()
 @Module({
+  imports: [DocsModule],
   providers: [
     MastraService,
     LoadToolsService,

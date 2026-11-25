@@ -42,6 +42,7 @@ import { ExistingDataContextProvider } from '@gitroom/frontend/components/launch
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+import type { SelectedDoc } from '@gitroom/frontend/components/docs/docs.picker.modal';
 
 export const AgentChat: FC = () => {
   const { backendUrl } = useVariables();
@@ -210,13 +211,17 @@ const Message: FC<UserMessageProps> = (props) => {
       .replace(/\[\-\-Media\-\-\](.*)\[\-\-Media\-\-\]/g, (match, p1) => {
         return `<div class="flex justify-center mt-[20px]">${p1}</div>`;
       })
+      .replace(/\[\-\-Docs\-\-\]([\s\S]*?)\[\-\-Docs\-\-\]/g, (match, p1) => {
+        return `<div class="mt-[8px] text-[12px] opacity-80">${p1}</div>`;
+      })
       .replace(
         /(\[--integrations--\][\s\S]*?\[--integrations--\])/g,
         (match, p1) => {
           return ``;
         }
       )
-      .replace(/\[--Media--\]/g, '');
+      .replace(/\[--Media--\]/g, '')
+      .replace(/\[--Docs--\]/g, '');
   }, [props.message?.content]);
   return (
     <div
@@ -227,13 +232,19 @@ const Message: FC<UserMessageProps> = (props) => {
 };
 const NewInput: FC<InputProps> = (props) => {
   const [media, setMedia] = useState([] as { path: string; id: string }[]);
+  const [docs, setDocs] = useState<SelectedDoc[]>([]);
   const [value, setValue] = useState('');
   const { properties } = useContext(PropertiesContext);
   const fetch = useFetch();
   const toaster = useToaster();
   const t = useT();
   const mediaRef = useRef<{ path: string; id: string }[]>([]);
+  const docsRef = useRef<SelectedDoc[]>([]);
   const pendingUpload = useRef<Promise<void>>(Promise.resolve());
+  const changeDocs = useCallback((nextDocs: SelectedDoc[]) => {
+    docsRef.current = nextDocs;
+    setDocs(nextDocs);
+  }, []);
   const changeMedia = useCallback(
     (event: {
       target: {
@@ -290,15 +301,22 @@ const NewInput: FC<InputProps> = (props) => {
   );
   return (
     <>
-      <MediaPortal value={value} media={media} setMedia={changeMedia} />
+      <MediaPortal
+        value={value}
+        media={media}
+        docs={docs}
+        setDocs={changeDocs}
+        setMedia={changeMedia}
+      />
       <Input
         {...props}
         onChange={setValue}
         onPasteFiles={uploadPastedImages}
-        hasAttachments={media.length > 0}
+        hasAttachments={media.length > 0 || docs.length > 0}
         onSend={async (text) => {
           await pendingUpload.current;
           const attachments = mediaRef.current;
+          const attachedDocs = docsRef.current;
           const send = props.onSend(
             text +
               (attachments.length > 0
@@ -311,6 +329,11 @@ const NewInput: FC<InputProps> = (props) => {
                     )
                     .join('\n') +
                   '\n[--Media--]'
+                : '') +
+              (attachedDocs.length > 0
+                ? '\n[--Docs--]' +
+                  attachedDocs.map((d) => `Document: ${d.path}`).join('\n') +
+                  '\n[--Docs--]'
                 : '') +
               `
 ${
@@ -331,6 +354,8 @@ Use the following social media platforms: ${JSON.stringify(
           setValue('');
           mediaRef.current = [];
           setMedia([]);
+          docsRef.current = [];
+          setDocs([]);
           return send;
         }}
       />
