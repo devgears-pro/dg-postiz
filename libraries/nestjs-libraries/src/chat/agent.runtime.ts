@@ -93,9 +93,7 @@ export class AgentRuntimeService {
       }
     }
 
-    const observabilityKey = options.external
-      ? 'disabled'
-      : this._observability.prepare(bundle);
+    const observabilityKey = this._observability.prepare(bundle);
 
     const skills = bundle.config.skills.map(toInlineSkill);
     const tools = { ...builtinTools, ...mcp.tools };
@@ -123,6 +121,10 @@ export class AgentRuntimeService {
           observabilityKey
         );
         requestContext.setRaw('organizationId', organizationId);
+        requestContext.setRaw(
+          'client',
+          requestContext.getRaw('client') ?? (options.external ? 'mcp' : 'ui')
+        );
         const version = resolveAgentVersion();
         if (version) requestContext.setRaw('version', version);
         requestContext.setRaw('defaultsVersion', bundle.config.defaultsVersion);

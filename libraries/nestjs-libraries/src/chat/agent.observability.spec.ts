@@ -495,4 +495,26 @@ describe('agent trace attributes', () => {
 
     expect(span.isValid).toBe(false);
   });
+
+  it('[TC-2-16-3] tags an external run with its client', async () => {
+    const exporter = new TestExporter();
+    const { registry, instance } = buildCapture(exporter);
+    const requestContext = buildRequestContext();
+    requestContext.setRaw('client', 'mcp');
+
+    const span = instance.startSpan({
+      name: 'agent run',
+      type: SpanType.AGENT_RUN,
+      requestContext,
+    });
+    span.end();
+    await registry.flush();
+
+    const [exported] = exporter.getSpansByType(SpanType.AGENT_RUN);
+    expect(withTenantTags(exported).tags).toEqual([
+      'postiz',
+      'org:org-test-123',
+      'client:mcp',
+    ]);
+  });
 });

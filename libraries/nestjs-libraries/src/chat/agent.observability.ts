@@ -15,12 +15,14 @@ import type { ResolvedAgentBundle } from '@gitroom/nestjs-libraries/chat/agent.c
 const SERVICE_NAME = 'postiz-agent';
 const TRACE_TAG = 'postiz';
 const ORGANIZATION_TAG_PREFIX = 'org:';
+const CLIENT_TAG_PREFIX = 'client:';
 
 export const REQUEST_CONTEXT_KEYS = [
   'organizationId',
   'userId',
   'sessionId',
   'threadId',
+  'client',
   'version',
   'defaultsVersion',
 ];
@@ -62,14 +64,16 @@ export const inferenceInputProcessor: SpanOutputProcessor = {
 export const withTenantTags = (span: AnyExportedSpan): AnyExportedSpan => {
   const organizationId =
     span.metadata?.organizationId ?? span.metadata?.resourceId;
+  const client = span.metadata?.client;
   if (span.isRootSpan && typeof organizationId === 'string' && organizationId) {
-    span.tags = [
-      ...new Set([
-        ...(span.tags ?? []),
-        TRACE_TAG,
-        `${ORGANIZATION_TAG_PREFIX}${organizationId}`,
-      ]),
+    const tags = [
+      TRACE_TAG,
+      `${ORGANIZATION_TAG_PREFIX}${organizationId}`,
+      ...(typeof client === 'string' && client
+        ? [`${CLIENT_TAG_PREFIX}${client}`]
+        : []),
     ];
+    span.tags = [...new Set([...(span.tags ?? []), ...tags])];
   }
 
   return span;
