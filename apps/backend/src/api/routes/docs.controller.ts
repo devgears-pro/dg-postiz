@@ -99,10 +99,12 @@ export class DocsController {
     }
     const { buffer, entry } = await this._docsService.readFile(org.id, path);
     const mimeType = entry.mimeType ?? 'application/octet-stream';
-    const disposition =
+    const encodedName = encodeURIComponent(entry.name);
+    const dispositionType =
       download === 'true' || mimeType === 'image/svg+xml'
-        ? `attachment; filename="${encodeURIComponent(entry.name)}"`
-        : `inline; filename="${encodeURIComponent(entry.name)}"`;
+        ? 'attachment'
+        : 'inline';
+    const disposition = `${dispositionType}; filename="${encodedName}"; filename*=UTF-8''${encodedName}`;
 
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Length', String(buffer.length));

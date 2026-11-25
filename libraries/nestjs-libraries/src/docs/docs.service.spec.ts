@@ -50,5 +50,40 @@ describe('DocsService', () => {
       expect(img.mimeType).toBe('image/png');
       expect(img.buffer.equals(PNG_1X1)).toBe(true);
     }
+
+    await service.uploadFile(
+      'org-1',
+      '/',
+      'icon.svg',
+      Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>', 'utf8')
+    );
+    const svg = await service.readForAgent('org-1', '/icon.svg', Number.NaN, Number.NaN);
+    expect(svg.kind).toBe('text');
+  });
+
+  it('forbids changing file extension on rename and handles corrupt pdf/docx', async () => {
+    await service.uploadFile(
+      'org-1',
+      '/',
+      'notes.txt',
+      Buffer.from('hello', 'utf8')
+    );
+    await expect(
+      service.rename('org-1', '/notes.txt', 'notes.md')
+    ).rejects.toThrow('Cannot change file extension');
+
+    const renamed = await service.rename('org-1', '/notes.txt', 'updated.txt');
+    expect(renamed.path).toBe('/updated.txt');
+
+    const storage = new LocalDocsStorage(rootDir);
+    await storage.writeFile('org-1', '/broken.pdf', Buffer.from('%PDF-broken', 'utf8'));
+    await expect(service.readForAgent('org-1', '/broken.pdf')).rejects.toThrow(
+      'Could not extract text from PDF document'
+    );
+
+    await storage.writeFile('org-1', '/broken.docx', Buffer.from('not-a-zip', 'utf8'));
+    await expect(service.readForAgent('org-1', '/broken.docx')).rejects.toThrow(
+      'Could not extract text from DOCX document'
+    );
   });
 });

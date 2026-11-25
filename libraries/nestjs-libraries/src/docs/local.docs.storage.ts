@@ -5,9 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  lstat,
   mkdir,
   readdir,
   readFile,
+  realpath,
   rename,
   rm,
   stat,
@@ -22,6 +24,8 @@ import {
 } from './docs.validation';
 
 const ORG_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
+const MAX_LIST_DEPTH = 20;
+const MAX_LIST_ENTRIES = 5000;
 
 @Injectable()
 export class LocalDocsStorage implements IDocsStorage {
@@ -29,7 +33,7 @@ export class LocalDocsStorage implements IDocsStorage {
 
   constructor(rootDir?: string) {
     this.rootDir = resolve(
-      rootDir ?? process.env.DOCS_DIRECTORY ?? '/data/documents'
+      rootDir ?? (process.env.DOCS_DIRECTORY || '/documents')
     );
   }
 
@@ -56,6 +60,53 @@ export class LocalDocsStorage implements IDocsStorage {
       throw new BadRequestException('Path escapes organization root');
     }
     return { orgBase, normalized, fsPath };
+  }
+
+  private async assertNoSymlinks(
+    orgBase: string,
+    fsPath: string
+  ): Promise<void> {
+    const relative = fsPath.slice(orgBase.length).replace(/^[/\\]+/, '');
+    const parts = relative ? relative.split(sep).filter(Boolean) : [];
+    let current = orgBase;
+    try {
+      const baseStat = await lstat(orgBase);
+      if (baseStat.isSymbolicLink()) {
+        throw new BadRequestException('Symlinks are not allowed');
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw err;
+      }
+    }
+    for (const part of parts) {
+      current = join(current, part);
+      try {
+        const info = await lstat(current);
+        if (info.isSymbolicLink()) {
+          throw new BadRequestException('Symlinks are not allowed');
+        }
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+          break;
+        }
+        throw err;
+      }
+    }
+    try {
+      const realOrgBase = await realpath(orgBase);
+      const realTarget = await realpath(fsPath);
+      if (
+        realTarget !== realOrgBase &&
+        !realTarget.startsWith(realOrgBase + sep)
+      ) {
+        throw new BadRequestException('Path escapes organization root');
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw err;
+      }
+    }
   }
 
   private async ensureOrgBase(orgId: string): Promise<string> {
@@ -90,12 +141,13 @@ export class LocalDocsStorage implements IDocsStorage {
     dirPath = '/',
     recursive = false
   ): Promise<DocEntry[]> {
-    await this.ensureOrgBase(orgId);
+    const orgBase = await this.ensureOrgBase(orgId);
     const { normalized, fsPath } = this.resolveTarget(orgId, dirPath);
+    await this.assertNoSymlinks(orgBase, fsPath);
 
     let dirInfo;
     try {
-      dirInfo = await stat(fsPath);
+      dirInfo = await lstat(fsPath);
     } catch {
       return [];
     }
@@ -104,24 +156,31 @@ export class LocalDocsStorage implements IDocsStorage {
     }
 
     const items: DocEntry[] = [];
-    const walk = async (currentFs: string, currentNorm: string) => {
+    const walk = async (
+      currentFs: string,
+      currentNorm: string,
+      depth: number
+    ) => {
+      if (depth > MAX_LIST_DEPTH || items.length >= MAX_LIST_ENTRIES) return;
       const entries = await readdir(currentFs, { withFileTypes: true });
       for (const dirent of entries) {
-        if (dirent.name.startsWith('.')) continue;
+        if (items.length >= MAX_LIST_ENTRIES) break;
+        if (dirent.name.startsWith('.') || dirent.isSymbolicLink()) continue;
         const childNorm =
           currentNorm === '/'
             ? `/${dirent.name}`
             : `${currentNorm}/${dirent.name}`;
         const childFs = join(currentFs, dirent.name);
-        const info = await stat(childFs);
+        const info = await lstat(childFs);
+        if (info.isSymbolicLink()) continue;
         items.push(this.toEntry(childNorm, info));
-        if (recursive && info.isDirectory()) {
-          await walk(childFs, childNorm);
+        if (recursive && info.isDirectory() && depth < MAX_LIST_DEPTH) {
+          await walk(childFs, childNorm, depth + 1);
         }
       }
     };
 
-    await walk(fsPath, normalized);
+    await walk(fsPath, normalized, 0);
     return items.sort((a, b) => {
       if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
       return a.path.localeCompare(b.path);
@@ -129,9 +188,11 @@ export class LocalDocsStorage implements IDocsStorage {
   }
 
   async stat(orgId: string, targetPath: string): Promise<DocEntry | null> {
-    const { normalized, fsPath } = this.resolveTarget(orgId, targetPath);
+    const { orgBase, normalized, fsPath } = this.resolveTarget(orgId, targetPath);
+    await this.assertNoSymlinks(orgBase, fsPath);
     try {
-      const info = await stat(fsPath);
+      const info = await lstat(fsPath);
+      if (info.isSymbolicLink()) return null;
       return this.toEntry(normalized, info);
     } catch {
       return null;
@@ -139,14 +200,12 @@ export class LocalDocsStorage implements IDocsStorage {
   }
 
   async createFolder(orgId: string, folderPath: string): Promise<DocEntry> {
-    await this.ensureOrgBase(orgId);
+    const orgBase = await this.ensureOrgBase(orgId);
     const { normalized, fsPath } = this.resolveTarget(orgId, folderPath);
     if (normalized === '/') {
       throw new BadRequestException('Cannot create root folder');
     }
-    for (const segment of normalized.slice(1).split('/')) {
-      sanitizeDocName(segment);
-    }
+    await this.assertNoSymlinks(orgBase, fsPath);
 
     await mkdir(fsPath, { recursive: true });
     const info = await stat(fsPath);
@@ -158,11 +217,12 @@ export class LocalDocsStorage implements IDocsStorage {
     filePath: string,
     content: Buffer
   ): Promise<DocEntry> {
-    await this.ensureOrgBase(orgId);
+    const orgBase = await this.ensureOrgBase(orgId);
     const { normalized, fsPath } = this.resolveTarget(orgId, filePath);
     if (normalized === '/') {
       throw new BadRequestException('Invalid file path');
     }
+    await this.assertNoSymlinks(orgBase, fsPath);
     const parentFs = resolve(fsPath, '..');
     await mkdir(parentFs, { recursive: true });
     await writeFile(fsPath, content);
@@ -174,15 +234,19 @@ export class LocalDocsStorage implements IDocsStorage {
     orgId: string,
     filePath: string
   ): Promise<{ buffer: Buffer; entry: DocEntry }> {
-    const { normalized, fsPath } = this.resolveTarget(orgId, filePath);
+    const { orgBase, normalized, fsPath } = this.resolveTarget(orgId, filePath);
     if (normalized === '/') {
       throw new NotFoundException('Document not found');
     }
+    await this.assertNoSymlinks(orgBase, fsPath);
     let info;
     try {
-      info = await stat(fsPath);
+      info = await lstat(fsPath);
     } catch {
       throw new NotFoundException('Document not found');
+    }
+    if (info.isSymbolicLink()) {
+      throw new BadRequestException('Symlinks are not allowed');
     }
     if (info.isDirectory()) {
       throw new BadRequestException('Cannot read a folder as a file');
@@ -199,30 +263,47 @@ export class LocalDocsStorage implements IDocsStorage {
     targetPath: string,
     newName: string
   ): Promise<DocEntry> {
-    const { normalized, fsPath } = this.resolveTarget(orgId, targetPath);
+    const { orgBase, normalized, fsPath } = this.resolveTarget(orgId, targetPath);
     if (normalized === '/') {
       throw new BadRequestException('Cannot rename root folder');
     }
+    await this.assertNoSymlinks(orgBase, fsPath);
     const cleanName = sanitizeDocName(newName);
     const parentNorm = posix.dirname(normalized);
     const nextNorm =
       parentNorm === '/' ? `/${cleanName}` : `${parentNorm}/${cleanName}`;
     const { fsPath: nextFs } = this.resolveTarget(orgId, nextNorm);
+    await this.assertNoSymlinks(orgBase, nextFs);
 
     try {
-      await stat(fsPath);
+      await lstat(fsPath);
     } catch {
       throw new NotFoundException('Document or folder not found');
     }
 
     if (nextFs !== fsPath) {
-      const exists = await stat(nextFs)
-        .then(() => true)
-        .catch(() => false);
-      if (exists) {
-        throw new ConflictException('A file or folder with this name already exists');
+      const isCaseOnlyRename = nextFs.toLowerCase() === fsPath.toLowerCase();
+      if (!isCaseOnlyRename) {
+        const exists = await lstat(nextFs)
+          .then(() => true)
+          .catch(() => false);
+        if (exists) {
+          throw new ConflictException(
+            'A file or folder with this name already exists'
+          );
+        }
       }
-      await rename(fsPath, nextFs);
+      try {
+        await rename(fsPath, nextFs);
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === 'ENOTEMPTY' || code === 'EEXIST') {
+          throw new ConflictException(
+            'A file or folder with this name already exists'
+          );
+        }
+        throw new BadRequestException('Could not rename item');
+      }
     }
 
     const info = await stat(nextFs);
@@ -230,20 +311,25 @@ export class LocalDocsStorage implements IDocsStorage {
   }
 
   async delete(orgId: string, targetPath: string): Promise<void> {
-    const { normalized, fsPath } = this.resolveTarget(orgId, targetPath);
+    const { orgBase, normalized, fsPath } = this.resolveTarget(orgId, targetPath);
     if (normalized === '/') {
       throw new BadRequestException('Cannot delete root folder');
     }
+    await this.assertNoSymlinks(orgBase, fsPath);
     let info;
     try {
-      info = await stat(fsPath);
+      info = await lstat(fsPath);
     } catch {
       throw new NotFoundException('Document or folder not found');
     }
-    if (info.isDirectory()) {
-      await rm(fsPath, { recursive: true, force: false });
-    } else {
-      await rm(fsPath, { force: false });
+    try {
+      if (info.isDirectory()) {
+        await rm(fsPath, { recursive: true, force: false });
+      } else {
+        await rm(fsPath, { force: false });
+      }
+    } catch {
+      throw new BadRequestException('Could not delete item');
     }
   }
 }

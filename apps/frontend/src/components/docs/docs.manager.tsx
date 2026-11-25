@@ -118,6 +118,10 @@ export const DocsManager: FC = () => {
 
   const initApi = useCallback(
     (api: IApi) => {
+      if (currentFolderRef.current !== '/') {
+        api.exec('set-path', { id: currentFolderRef.current });
+      }
+
       api.on('set-path', (ev: { id: TID }) => {
         const next = ev.id || '/';
         currentFolderRef.current = next;
@@ -182,8 +186,13 @@ export const DocsManager: FC = () => {
             { method: 'DELETE' }
           );
           if (!res.ok) {
+            const errBody = (await res.json().catch(() => ({}))) as {
+              message?: string;
+            };
             toaster.show(
-              t('docs_delete_failed', 'Could not delete item'),
+              typeof errBody.message === 'string'
+                ? errBody.message
+                : t('docs_delete_failed', 'Could not delete item'),
               'warning'
             );
           }

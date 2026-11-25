@@ -11,6 +11,7 @@ import {
   isImageDocExtension,
   isTextDocExtension,
   normalizeDocPath,
+  sanitizeDocName,
   validateAndDetectDoc,
 } from './docs.validation';
 
@@ -32,6 +33,7 @@ export type DocReadResult =
     };
 
 const DEFAULT_READ_LIMIT = 24_000;
+const MAX_AGENT_IMAGE_BYTES = 10 * 1024 * 1024;
 
 @Injectable()
 export class DocsService {
@@ -65,7 +67,23 @@ export class DocsService {
     return this._storage.readFile(orgId, filePath);
   }
 
-  rename(orgId: string, targetPath: string, newName: string): Promise<DocEntry> {
+  async rename(
+    orgId: string,
+    targetPath: string,
+    newName: string
+  ): Promise<DocEntry> {
+    const existing = await this._storage.stat(orgId, targetPath);
+    if (existing?.type === 'file') {
+      const cleanName = sanitizeDocName(newName);
+      if (
+        extname(cleanName).toLowerCase() !==
+        extname(existing.name).toLowerCase()
+      ) {
+        throw new BadRequestException(
+          'Cannot change file extension when renaming'
+        );
+      }
+    }
     return this._storage.rename(orgId, targetPath, newName);
   }
 
@@ -84,6 +102,11 @@ export class DocsService {
     const mimeType = entry.mimeType ?? 'application/octet-stream';
 
     if (isImageDocExtension(ext)) {
+      if (buffer.length > MAX_AGENT_IMAGE_BYTES) {
+        throw new BadRequestException(
+          'Image exceeds maximum size for agent inspection (10 MB)'
+        );
+      }
       return {
         kind: 'image',
         path: entry.path,
@@ -100,18 +123,30 @@ export class DocsService {
       try {
         const result = await parser.getText();
         fullText = result.text;
+      } catch {
+        throw new BadRequestException('Could not extract text from PDF document');
       } finally {
         await parser.destroy();
       }
     } else if (ext === '.docx') {
-      const result = await mammoth.extractRawText({ buffer });
-      fullText = result.value;
+      try {
+        const result = await mammoth.extractRawText({ buffer });
+        fullText = result.value;
+      } catch {
+        throw new BadRequestException(
+          'Could not extract text from DOCX document'
+        );
+      }
     } else {
       throw new BadRequestException(`Unsupported document format: ${ext}`);
     }
 
-    const safeOffset = Math.max(0, offset);
-    const safeLimit = Math.min(Math.max(100, limit), 60_000);
+    const safeOffset = Number.isFinite(offset)
+      ? Math.max(0, Math.floor(offset))
+      : 0;
+    const safeLimit = Number.isFinite(limit)
+      ? Math.min(Math.max(100, Math.floor(limit)), 60_000)
+      : DEFAULT_READ_LIMIT;
     const slice = fullText.slice(safeOffset, safeOffset + safeLimit);
     return {
       kind: 'text',

@@ -28,16 +28,20 @@ export const DocsPickerModal: FC<{
 
   const load = useCallback(async () => {
     const res = await fetch('/documents?recursive=true');
-    if (!res.ok) return [];
+    if (!res.ok) {
+      throw new Error('Failed to load documents');
+    }
     const json = (await res.json()) as { items?: DocListItem[] };
     return (json.items ?? []).filter((item) => item.type === 'file');
   }, [fetch]);
 
-  const { data: files = [], isLoading } = useSWR<DocListItem[]>(
-    'docs-picker-files',
-    load,
-    { revalidateOnMount: true }
-  );
+  const {
+    data: files = [],
+    error,
+    isLoading,
+  } = useSWR<DocListItem[]>('docs-picker-files', load, {
+    revalidateOnMount: true,
+  });
 
   const toggle = (item: DocListItem) => {
     setSelected((prev) =>
@@ -53,7 +57,12 @@ export const DocsPickerModal: FC<{
         {isLoading && (
           <div className="text-[14px] opacity-60">{t('loading', 'Loading...')}</div>
         )}
-        {!isLoading && files.length === 0 && (
+        {!isLoading && error && (
+          <div className="text-[14px] text-red-400">
+            {t('docs_load_failed', 'Could not load documents.')}
+          </div>
+        )}
+        {!isLoading && !error && files.length === 0 && (
           <div className="text-[14px] opacity-60">
             {t('docs_empty', 'No documents uploaded yet.')}
           </div>

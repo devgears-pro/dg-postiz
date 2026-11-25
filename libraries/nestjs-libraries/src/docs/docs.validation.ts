@@ -57,12 +57,15 @@ export function mimeForDocPath(filePath: string): string {
 
 export function normalizeDocPath(rawPath?: string): string {
   const raw = (rawPath ?? '/').trim().replace(/\\/g, '/');
-  if (raw.includes('\0')) {
+  if (raw.includes('\0') || /[\x00-\x1f\x7f]/.test(raw)) {
     throw new BadRequestException('Invalid path');
   }
   const segments = raw.split('/').filter((s) => s.length > 0 && s !== '.');
   if (segments.some((s) => s === '..')) {
     throw new BadRequestException('Path traversal is not allowed');
+  }
+  for (const segment of segments) {
+    sanitizeDocName(segment);
   }
   return '/' + posix.join(...segments).replace(/^\.$/, '');
 }
@@ -74,7 +77,7 @@ export function sanitizeDocName(rawName: string): string {
     name === '.' ||
     name === '..' ||
     name.startsWith('.') ||
-    /[/\\\0]/.test(name) ||
+    /[/\\\0\x00-\x1f\x7f]/.test(name) ||
     name.length > 180
   ) {
     throw new BadRequestException('Invalid file or folder name');
@@ -123,8 +126,14 @@ export async function validateAndDetectDoc(
       throw new BadRequestException('Invalid SVG file');
     }
     const text = buffer.toString('utf8');
-    if (!/<svg[\s>]/i.test(text)) {
-      throw new BadRequestException('File content is not a valid SVG');
+    if (
+      !/<svg[\s>]/i.test(text) ||
+      /<script[\s>]/i.test(text) ||
+      /<foreignObject[\s>]/i.test(text) ||
+      /\bon[a-z]+\s*=/i.test(text) ||
+      /javascript\s*:/i.test(text)
+    ) {
+      throw new BadRequestException('File content is not a valid safe SVG');
     }
     return { safeName, ext, mimeType: declaredMime };
   }

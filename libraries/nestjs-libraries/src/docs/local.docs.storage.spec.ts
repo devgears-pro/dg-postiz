@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalDocsStorage } from './local.docs.storage';
@@ -80,5 +80,35 @@ describe('LocalDocsStorage and validation', () => {
     await expect(
       validateAndDetectDoc('fake.pdf', Buffer.from('not a pdf', 'utf8'))
     ).rejects.toThrow();
+  });
+
+  it('supports non-recursive listing, file rename, and case-only rename', async () => {
+    await storage.createFolder('org-a', '/sub');
+    await storage.writeFile('org-a', '/sub/note.txt', Buffer.from('hi', 'utf8'));
+    await storage.writeFile('org-a', '/top.txt', Buffer.from('top', 'utf8'));
+
+    const topOnly = await storage.list('org-a', '/', false);
+    expect(topOnly.map((i) => i.path)).toEqual(['/sub', '/top.txt']);
+
+    const renamedFile = await storage.rename('org-a', '/sub/note.txt', 'memo.txt');
+    expect(renamedFile.path).toBe('/sub/memo.txt');
+
+    const caseRenamed = await storage.rename('org-a', '/sub/memo.txt', 'Memo.txt');
+    expect(caseRenamed.path).toBe('/sub/Memo.txt');
+  });
+
+  it('blocks symlinks escaping or residing inside organization storage', async () => {
+    const outsideDir = await mkdtemp(join(tmpdir(), 'postiz-docs-outside-'));
+    try {
+      const secretOutside = join(outsideDir, 'secret.txt');
+      await writeFile(secretOutside, 'outside secret');
+      await mkdir(join(rootDir, 'org-a'), { recursive: true });
+      await symlink(secretOutside, join(rootDir, 'org-a', 'leak.txt'));
+
+      expect(await storage.list('org-a', '/', true)).toEqual([]);
+      await expect(storage.readFile('org-a', '/leak.txt')).rejects.toThrow();
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true });
+    }
   });
 });
