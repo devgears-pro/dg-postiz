@@ -114,7 +114,12 @@ export const assertThreadAccess = async (
   organizationId: string,
   threadId: string | undefined
 ): Promise<void> => {
-  if (!threadId || !memory) return;
+  if (!threadId) return;
+
+  if (!memory) {
+    Logger.warn('The conversation store is not available');
+    throw new ServiceUnavailableException('Could not verify the conversation');
+  }
 
   let thread: { resourceId?: string } | null;
   try {

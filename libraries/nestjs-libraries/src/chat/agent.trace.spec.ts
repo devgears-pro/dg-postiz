@@ -66,6 +66,9 @@ describe('agent trace context', () => {
         throw new Error('The database is unavailable');
       })
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      assertThreadAccess(undefined, 'org-1', 'thread-1')
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('[TC-2-11-3] rejects an invalid conversation id', () => {
