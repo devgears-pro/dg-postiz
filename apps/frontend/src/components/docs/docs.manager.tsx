@@ -145,6 +145,7 @@ const DocPreviewModal: FC<{
     <div className="flex flex-col gap-[16px] w-full sm:min-w-[420px] max-w-[780px]">
       {isImage && !imageError && (
         <div className="flex items-center justify-center bg-newBgColor rounded-[8px] border border-newTableBorder p-[16px] max-h-[60vh] overflow-auto">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={fileUrl}
             alt={item.name}
@@ -596,11 +597,14 @@ export const DocsManager: FC = () => {
                           <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
                         </svg>
                       ) : isImage ? (
-                        <img
-                          src={`${backendUrl}/documents/file?path=${encodeURIComponent(item.path)}`}
-                          alt={item.name}
-                          className="w-full h-full object-cover"
-                        />
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`${backendUrl}/documents/file?path=${encodeURIComponent(item.path)}`}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </>
                       ) : (
                         <span className="px-[10px] py-[4px] rounded-[6px] bg-btnPrimary/15 border border-btnPrimary/30 text-[12px] font-[600] uppercase tracking-wide">
                           {ext || 'FILE'}
