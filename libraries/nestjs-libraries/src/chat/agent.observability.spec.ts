@@ -18,13 +18,26 @@ const langfuseExporterOptions = vi.hoisted(
   () => [] as Array<Record<string, unknown>>
 );
 
+const langfuseEvents = vi.hoisted(
+  () => [] as Array<{ exportedSpan?: { errorInfo?: { message?: string } } }>
+);
+
+const langfuseFailure = vi.hoisted(() => ({ enabled: false }));
+
 vi.mock('@mastra/langfuse', () => ({
   LangfuseExporter: class {
     constructor(options: Record<string, unknown>) {
       langfuseExporterOptions.push(options);
     }
 
-    exportTracingEvent = async (): Promise<void> => undefined;
+    exportTracingEvent = async (event: {
+      exportedSpan?: { errorInfo?: { message?: string } };
+    }): Promise<void> => {
+      if (langfuseFailure.enabled) {
+        throw new Error('Langfuse is unreachable');
+      }
+      langfuseEvents.push(event);
+    };
     flush = async (): Promise<void> => undefined;
     shutdown = async (): Promise<void> => undefined;
   },
@@ -36,6 +49,8 @@ afterEach(() => {
 
 beforeEach(() => {
   langfuseExporterOptions.length = 0;
+  langfuseEvents.length = 0;
+  langfuseFailure.enabled = false;
 });
 
 const buildDefaults = (options: {
@@ -187,36 +202,63 @@ describe('AgentObservabilityService', () => {
   });
 
   it('[TC-2-8-1] records error status and failure details in trace spans', async () => {
-    const exporter = new TestExporter();
-    const { registry, instance } = buildCapture(exporter);
+    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
+    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
+    const service = new AgentObservabilityService();
+    const registry = service.createRegistry(
+      buildDefaults({ enabled: true, captureContent: true })
+    );
+    const instance = registry.getInstance('system');
+    if (!instance) throw new Error('The system instance is missing');
+
     const span = instance.startSpan({
       name: 'agent run',
       type: SpanType.AGENT_RUN,
       requestContext: buildRequestContext(),
     });
-
     span.error({ error: new Error('The model provider timed out') });
     await registry.flush();
 
-    const [exported] = exporter.getSpansByType(SpanType.AGENT_RUN);
-    expect(exported.errorInfo?.message).toBe('The model provider timed out');
-    expect(exported.endTime).toBeDefined();
+    const ended = langfuseEvents.find(
+      (event) =>
+        event.exportedSpan?.errorInfo?.message ===
+        'The model provider timed out'
+    );
+    expect(ended).toBeDefined();
   });
 
   it('[TC-2-9-1] redacts sensitive tokens and credentials from trace output', async () => {
+    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
+    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
+    const service = new AgentObservabilityService();
+    const registry = service.createRegistry(
+      buildDefaults({ enabled: true, captureContent: true })
+    );
+    const system = registry.getInstance('system');
+    if (!system) throw new Error('The system instance is missing');
     const exporter = new TestExporter();
-    const { registry, instance } = buildCapture(exporter, {
-      sensitiveDataFilter: true,
+    const probe = new Observability({
+      configs: {
+        probe: {
+          serviceName: 'probe',
+          exporters: [exporter],
+          requestContextKeys: REQUEST_CONTEXT_KEYS,
+          spanOutputProcessors: [...system.getSpanOutputProcessors()],
+        },
+      },
+      configSelector: () => 'probe',
     });
+    const instance = probe.getInstance('probe');
+    if (!instance) throw new Error('The probe instance is missing');
+
     const span = instance.startSpan({
       name: 'agent run',
       type: SpanType.AGENT_RUN,
       requestContext: buildRequestContext(),
       metadata: { token: 'sk-live-secret-value' },
     });
-
     span.end();
-    await registry.flush();
+    await probe.flush();
 
     const [exported] = exporter.getSpansByType(SpanType.AGENT_RUN);
     expect(exported.metadata.token).not.toBe('sk-live-secret-value');
@@ -224,27 +266,15 @@ describe('AgentObservabilityService', () => {
   });
 
   it('[TC-2-9-2] continues operation without blocking when telemetry export fails', async () => {
-    const failingExporter = {
-      name: 'failing-exporter',
-      exportTracingEvent: async (): Promise<void> => {
-        throw new Error('Langfuse is unreachable');
-      },
-      flush: async (): Promise<void> => undefined,
-      shutdown: async (): Promise<void> => undefined,
-    };
-    const registry = new Observability({
-      configs: {
-        test: {
-          serviceName: 'postiz-agent',
-          exporters: [failingExporter],
-          requestContextKeys: REQUEST_CONTEXT_KEYS,
-        },
-      },
-      configSelector: () => 'test',
-    });
-    const instance = registry.getInstance('test');
-    if (!instance)
-      throw new Error('The test observability instance is missing');
+    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
+    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
+    langfuseFailure.enabled = true;
+    const service = new AgentObservabilityService();
+    const registry = service.createRegistry(
+      buildDefaults({ enabled: true, captureContent: true })
+    );
+    const instance = registry.getInstance('system');
+    if (!instance) throw new Error('The system instance is missing');
 
     const span = instance.startSpan({
       name: 'agent run',
@@ -253,8 +283,7 @@ describe('AgentObservabilityService', () => {
     });
     span.end();
 
-    await expect(registry.flush()).resolves.toBeUndefined();
-    await expect(registry.shutdown()).resolves.toBeUndefined();
+    await expect(service.shutdown()).resolves.toBeUndefined();
   });
 });
 

@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
-import { Observability } from '@mastra/observability';
+import { Observability, SensitiveDataFilter } from '@mastra/observability';
 import type { ObservabilityInstanceConfig } from '@mastra/observability';
 import { LangfuseExporter } from '@mastra/langfuse';
 import { SamplingStrategyType, SpanType } from '@mastra/core/observability';
@@ -93,6 +93,7 @@ export const buildTraceConfig = (
   spanOutputProcessors: [
     inferenceInputProcessor,
     ...(captureContent ? [] : [hideContentProcessor]),
+    new SensitiveDataFilter(),
   ],
 });
 
@@ -144,7 +145,6 @@ export class AgentObservabilityService implements OnApplicationShutdown {
         if (!key || !this._registry?.hasInstance(key)) return 'disabled';
         return key;
       },
-      sensitiveDataFilter: true,
     });
 
     return this._registry;

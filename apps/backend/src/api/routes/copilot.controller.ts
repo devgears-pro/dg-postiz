@@ -89,12 +89,12 @@ export class CopilotController {
     @GetOrgFromRequest() organization: Organization,
     @GetUserFromRequest() user: User
   ) {
-    const mastra = await this._mastraService.mastra();
     const threadId = readRequestThreadId(
       req?.body?.method,
       req?.body?.body,
       req?.body?.params
     );
+    const mastra = await this._mastraService.mastra();
 
     if (threadId) {
       const memory = await loadThreadMemory(() =>
@@ -133,7 +133,7 @@ export class CopilotController {
     requestContext.set('ui', 'true');
     applyTraceIdentity(requestContext, {
       organizationId: organization.id,
-      userId: user?.id,
+      userId: user.id,
       threadId,
     });
     prepared.applyTo(requestContext);
