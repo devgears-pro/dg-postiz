@@ -138,4 +138,36 @@ describe('DocsListTool and DocsReadTool', () => {
     });
     expect(sendMessage).toHaveBeenCalledOnce();
   });
+
+  it('DocsReadTool rejects cross-org thread access', async () => {
+    const docsService = {
+      readForAgent: vi.fn().mockResolvedValue({
+        kind: 'image',
+        path: '/logo.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from('png'),
+      }),
+    } as unknown as DocsService;
+
+    const messaging: AgentMessagingLike = {
+      mastra: vi.fn().mockResolvedValue({
+        getAgent: () => ({
+          getMemory: () =>
+            Promise.resolve({
+              getThreadById: () => Promise.resolve({ resourceId: 'other-org' }),
+            }),
+          sendMessage: vi.fn(),
+        }),
+      }),
+    };
+
+    const tool = new DocsReadTool(docsService, messaging).run();
+    const res = await tool.execute!(
+      { path: '/logo.png' },
+      makeContext('org-1', 'thread-1') as never
+    );
+    expect(res).toEqual({
+      error: 'Images from Docs require an active conversation.',
+    });
+  });
 });

@@ -21,7 +21,7 @@ describe('docs.validation', () => {
       '/brandbook/2026/guide.md'
     );
 
-    for (const bad of ['/../etc/passwd', '/a/../../b', '/.hidden/file.txt', '/a\x07b']) {
+    for (const bad of ['/../etc/passwd', '/a/../../b', '/.hidden/file.txt', '/a\x07b', '/' + Array.from({ length: 21 }, (_, i) => `d${i}`).join('/')]) {
       expect(() => normalizeDocPath(bad)).toThrow();
     }
   });

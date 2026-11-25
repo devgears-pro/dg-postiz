@@ -111,4 +111,19 @@ describe('LocalDocsStorage and validation', () => {
       await rm(outsideDir, { recursive: true, force: true });
     }
   });
+
+  it('throws ConflictException on duplicate rename and NotFoundException on missing paths', async () => {
+    await storage.writeFile('org-a', '/a.txt', Buffer.from('a', 'utf8'));
+    await storage.writeFile('org-a', '/b.txt', Buffer.from('b', 'utf8'));
+
+    await expect(
+      storage.rename('org-a', '/a.txt', 'b.txt')
+    ).rejects.toThrow('already exists');
+    await expect(
+      storage.readFile('org-a', '/missing.txt')
+    ).rejects.toThrow('Document not found');
+    await expect(
+      storage.delete('org-a', '/missing.txt')
+    ).rejects.toThrow('not found');
+  });
 });

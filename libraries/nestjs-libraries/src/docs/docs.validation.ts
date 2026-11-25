@@ -9,6 +9,7 @@ const { fileTypeFromBuffer } = require('file-type') as {
 };
 
 export const DOCS_MAX_FILE_BYTES = 20 * 1024 * 1024;
+export const DOCS_MAX_PATH_DEPTH = 20;
 
 export const DOCS_EXTENSION_MIME: Record<string, string> = {
   '.md': 'text/markdown',
@@ -63,6 +64,9 @@ export function normalizeDocPath(rawPath?: string): string {
   const segments = raw.split('/').filter((s) => s.length > 0 && s !== '.');
   if (segments.some((s) => s === '..')) {
     throw new BadRequestException('Path traversal is not allowed');
+  }
+  if (segments.length > DOCS_MAX_PATH_DEPTH) {
+    throw new BadRequestException('Maximum folder depth exceeded');
   }
   for (const segment of segments) {
     sanitizeDocName(segment);
@@ -144,6 +148,12 @@ export async function validateAndDetectDoc(
     throw new BadRequestException(
       'File content does not match the declared extension'
     );
+  }
+  if (
+    ext === '.docx' &&
+    (!buffer.includes('[Content_Types].xml') || !buffer.includes('word/'))
+  ) {
+    throw new BadRequestException('File is not a valid DOCX document');
   }
 
   return { safeName, ext, mimeType: declaredMime };

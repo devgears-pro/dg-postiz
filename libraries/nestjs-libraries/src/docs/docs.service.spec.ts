@@ -85,5 +85,10 @@ describe('DocsService', () => {
     await expect(service.readForAgent('org-1', '/broken.docx')).rejects.toThrow(
       'Could not extract text from DOCX document'
     );
+
+    await storage.writeFile('org-1', '/big.png', Buffer.alloc(10 * 1024 * 1024 + 1, 0));
+    await expect(service.readForAgent('org-1', '/big.png')).rejects.toThrow(
+      'Image exceeds maximum size'
+    );
   });
 });

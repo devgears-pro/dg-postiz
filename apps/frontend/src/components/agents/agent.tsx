@@ -83,15 +83,18 @@ export const MediaPortal: FC<{
           {docs.map((doc) => (
             <span
               key={doc.path}
-              className="inline-flex items-center gap-[6px] px-[8px] py-[4px] rounded-[6px] bg-newColColor text-[12px]"
+              className="inline-flex items-center gap-[6px] px-[8px] py-[4px] rounded-[6px] bg-newColColor text-[12px] max-w-[260px]"
             >
-              <span>{doc.path}</span>
+              <span className="truncate" title={doc.path}>
+                {doc.path}
+              </span>
               <button
                 type="button"
+                aria-label={t('docs_remove_attachment', 'Remove document')}
                 onClick={() =>
                   setDocs(docs.filter((item) => item.path !== doc.path))
                 }
-                className="opacity-70 hover:opacity-100 cursor-pointer"
+                className="opacity-70 hover:opacity-100 cursor-pointer shrink-0"
               >
                 ×
               </button>

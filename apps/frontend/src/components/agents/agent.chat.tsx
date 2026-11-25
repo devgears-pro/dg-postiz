@@ -212,7 +212,13 @@ const Message: FC<UserMessageProps> = (props) => {
         return `<div class="flex justify-center mt-[20px]">${p1}</div>`;
       })
       .replace(/\[\-\-Docs\-\-\]([\s\S]*?)\[\-\-Docs\-\-\]/g, (match, p1) => {
-        return `<div class="mt-[8px] text-[12px] opacity-80">${p1}</div>`;
+        const escaped = String(p1)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+        return `<div class="mt-[8px] text-[12px] opacity-80">${escaped}</div>`;
       })
       .replace(
         /(\[--integrations--\][\s\S]*?\[--integrations--\])/g,

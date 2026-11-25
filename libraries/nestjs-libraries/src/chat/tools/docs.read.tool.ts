@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { AgentToolInterface } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
@@ -94,12 +94,11 @@ export class DocsReadTool implements AgentToolInterface {
               error: 'Images from Docs require an active conversation.',
             };
           }
-          const resourceId = ctx?.resourceId ?? org.id;
           const mastra = await this._messaging.mastra();
           const agent = mastra.getAgent('postiz');
           const memory = await agent.getMemory();
           const thread = await memory?.getThreadById({ threadId });
-          if (!thread || thread.resourceId !== resourceId) {
+          if (!thread || thread.resourceId !== org.id) {
             return {
               error: 'Images from Docs require an active conversation.',
             };
@@ -120,7 +119,7 @@ export class DocsReadTool implements AgentToolInterface {
               ],
             },
             {
-              resourceId,
+              resourceId: org.id,
               threadId,
               ifIdle: { behavior: 'discard' },
             }
@@ -142,7 +141,7 @@ export class DocsReadTool implements AgentToolInterface {
           );
           return {
             error:
-              err instanceof Error
+              err instanceof HttpException
                 ? err.message
                 : 'Could not read the requested document.',
           };

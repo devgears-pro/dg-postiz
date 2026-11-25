@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, Injectable } from '@nestjs/common';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { AgentToolInterface } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
@@ -77,7 +77,7 @@ export class DocsListTool implements AgentToolInterface {
         } catch (err) {
           return {
             error:
-              err instanceof Error
+              err instanceof HttpException
                 ? err.message
                 : 'Could not list organization documents.',
           };
