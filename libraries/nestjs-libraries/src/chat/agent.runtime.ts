@@ -13,7 +13,7 @@ import {
   AgentConnectionsService,
   type AgentModel,
 } from '@gitroom/nestjs-libraries/chat/agent.connections';
-import { AgentObservabilityService } from '@gitroom/nestjs-libraries/chat/agent.observability';
+import { AgentObservabilityService, resolveAgentVersion } from '@gitroom/nestjs-libraries/chat/agent.observability';
 import { LoadToolsService } from '@gitroom/nestjs-libraries/chat/load.tools.service';
 import type { AgentRequestContext } from '@gitroom/nestjs-libraries/chat/agent.runtime.token';
 
@@ -120,6 +120,11 @@ export class AgentRuntimeService {
           observabilityKey
         );
         requestContext.setRaw('organizationId', organizationId);
+        requestContext.setRaw(
+          'version',
+          resolveAgentVersion(bundle.config.defaultsVersion)
+        );
+        requestContext.setRaw('defaultsVersion', bundle.config.defaultsVersion);
       },
     };
   }

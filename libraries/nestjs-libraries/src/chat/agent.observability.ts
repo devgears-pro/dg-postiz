@@ -1,17 +1,26 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { Observability } from '@mastra/observability';
 import { LangfuseExporter } from '@mastra/langfuse';
+import { SpanType } from '@mastra/core/observability';
 import type { AnySpan, SpanOutputProcessor } from '@mastra/core/observability';
 import type { SystemAgentDefaults } from '@gitroom/helpers/agent/agent.config.schema';
 import type { ResolvedAgentBundle } from '@gitroom/nestjs-libraries/chat/agent.config.service';
 
 const SERVICE_NAME = 'postiz-agent';
-const REQUEST_CONTEXT_KEYS = [
+const TRACE_TAG = 'postiz';
+const ORGANIZATION_TAG_PREFIX = 'org:';
+
+export const REQUEST_CONTEXT_KEYS = [
   'organizationId',
+  'userId',
+  'sessionId',
   'threadId',
-  'revision',
+  'version',
   'defaultsVersion',
 ];
+
+export const resolveAgentVersion = (defaultsVersion: string): string =>
+  process.env.NEXT_PUBLIC_VERSION?.trim() || defaultsVersion;
 
 const hideContentProcessor: SpanOutputProcessor = {
   name: 'postiz-hide-agent-content',
@@ -22,6 +31,51 @@ const hideContentProcessor: SpanOutputProcessor = {
     return span;
   },
   shutdown: async () => undefined,
+};
+
+export const inferenceInputProcessor: SpanOutputProcessor = {
+  name: 'postiz-inference-input',
+  process: (span?: AnySpan) => {
+    if (!span) return span;
+    if (span.type === SpanType.MODEL_INFERENCE && span.input === undefined) {
+      const parentInput = span.parent?.input;
+      if (parentInput !== undefined) span.input = parentInput;
+    }
+    return span;
+  },
+  shutdown: async () => undefined,
+};
+
+type TenantSpan = {
+  isRootSpan?: boolean;
+  metadata?: Record<string, unknown>;
+  tags?: string[];
+};
+
+export const withTenantTags = <T extends TenantSpan>(span: T): T => {
+  const metadata = span.metadata;
+  if (!metadata) return span;
+
+  const organizationId = metadata.organizationId ?? metadata.resourceId;
+  if (
+    metadata.organizationId === undefined &&
+    typeof organizationId === 'string'
+  ) {
+    metadata.organizationId = organizationId;
+  }
+
+  if (
+    span.isRootSpan &&
+    typeof metadata.organizationId === 'string' &&
+    metadata.organizationId
+  ) {
+    span.tags = [
+      TRACE_TAG,
+      `${ORGANIZATION_TAG_PREFIX}${metadata.organizationId}`,
+    ];
+  }
+
+  return span;
 };
 
 const noopExporter = {
@@ -61,14 +115,18 @@ export class AgentObservabilityService implements OnApplicationShutdown {
               publicKey,
               secretKey,
               baseUrl: defaults.langfuse.baseUrl,
-              release: defaults.defaultsVersion,
+              release: resolveAgentVersion(defaults.defaultsVersion),
               environment: process.env.NODE_ENV,
+              customSpanFormatter: withTenantTags,
             }),
           ],
           requestContextKeys: REQUEST_CONTEXT_KEYS,
-          ...(defaults.langfuse.captureContent
-            ? {}
-            : { spanOutputProcessors: [hideContentProcessor] }),
+          spanOutputProcessors: [
+            inferenceInputProcessor,
+            ...(defaults.langfuse.captureContent
+              ? []
+              : [hideContentProcessor]),
+          ],
         };
       }
     }

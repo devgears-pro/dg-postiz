@@ -25,6 +25,10 @@ import { RequestContext } from '@mastra/core/di';
 import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
 import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
 import { AgentRuntimeService } from '@gitroom/nestjs-libraries/chat/agent.runtime';
+import {
+  assertThreadAccess,
+  buildSessionId,
+} from '@gitroom/nestjs-libraries/chat/agent.trace';
 
 export type ChannelsContext = {
   integrations: string;
@@ -79,6 +83,12 @@ export class CopilotController {
     @GetOrgFromRequest() organization: Organization
   ) {
     const mastra = await this._mastraService.mastra();
+    const threadId = req?.body?.threadId || req?.body?.body?.threadId;
+
+    if (threadId) {
+      const memory = await mastra.getAgent('postiz').getMemory();
+      await assertThreadAccess(memory, organization.id, threadId);
+    }
 
     const prepared = await this._agentRuntime
       .prepare(organization.id, { ui: true })
@@ -108,8 +118,17 @@ export class CopilotController {
 
     requestContext.set('organization', JSON.stringify(organization));
     requestContext.set('ui', 'true');
-    const threadId = req?.body?.threadId || req?.body?.body?.threadId;
-    if (threadId) requestContext.setRaw('threadId', threadId);
+    if (threadId) {
+      requestContext.setRaw('threadId', threadId);
+      requestContext.setRaw(
+        'sessionId',
+        buildSessionId(organization.id, threadId)
+      );
+    }
+
+    const userId = (req as Request & { user?: { id?: string } }).user?.id;
+    if (userId) requestContext.setRaw('userId', userId);
+
     prepared.applyTo(requestContext);
 
     const agents = MastraAgent.getLocalAgents({
