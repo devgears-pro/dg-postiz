@@ -72,15 +72,22 @@ const buildBundle = (options: {
 
 describe('AgentObservabilityService', () => {
   it('[TC-2-6-1] transfers prompt, input, tool calls, and response when content capture is enabled', async () => {
-    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
-    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
+    const exporter = new TestExporter();
+    const { registry, instance } = buildCapture(exporter);
+    const messages = [{ role: 'user', content: 'How do I schedule a post?' }];
+    const answer = { text: 'Open the calendar and pick a date.', toolCalls: [] };
 
-    const service = new AgentObservabilityService();
-    const defaults = buildDefaults({ enabled: true, captureContent: true });
-    const registry = service.createRegistry(defaults);
+    const span = instance.startSpan({
+      name: 'agent run',
+      type: SpanType.AGENT_RUN,
+      input: messages,
+      requestContext: buildRequestContext(),
+    });
+    span.update({ output: answer });
+    span.end();
+    await registry.flush();
 
-    expect(registry.hasInstance('system')).toBe(true);
-
+    const [exported] = exporter.getSpansByType(SpanType.AGENT_RUN);
     const envWithLangfuse = {
       LANGFUSE_BASE_URL: 'https://langfuse.example.test',
       LANGFUSE_PUBLIC_KEY: 'pk-lf-test',
@@ -89,65 +96,89 @@ describe('AgentObservabilityService', () => {
     const loadedDefaults = await loadAgentDefaults(envWithLangfuse, {
       toolCatalog: [],
     });
-    expect(loadedDefaults.langfuse.captureContent).toBe(true);
 
-    vi.unstubAllEnvs();
+    expect(exported.input).toEqual(messages);
+    expect(exported.output).toEqual(answer);
+    expect(loadedDefaults.langfuse.captureContent).toBe(true);
   });
 
   it('[TC-2-8-1] records error status and failure details in trace spans', async () => {
-    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
-    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
+    const exporter = new TestExporter();
+    const { registry, instance } = buildCapture(exporter);
+    const span = instance.startSpan({
+      name: 'agent run',
+      type: SpanType.AGENT_RUN,
+      requestContext: buildRequestContext(),
+    });
 
-    const service = new AgentObservabilityService();
-    const defaults = buildDefaults({ enabled: true, captureContent: true });
-    const registry = service.createRegistry(defaults);
-    expect(registry.hasInstance('system')).toBe(true);
+    span.error({ error: new Error('The model provider timed out') });
+    await registry.flush();
 
-    const errorEvent = {
-      id: 'span-error-1',
-      name: 'agent run: postiz',
-      errorInfo: {
-        id: 'MODEL_CALL_FAILED',
-        message: 'LLM provider connection timed out',
-      },
-    };
-
-    expect(errorEvent.errorInfo.message).toBe(
-      'LLM provider connection timed out'
-    );
-
-    vi.unstubAllEnvs();
+    const [exported] = exporter.getSpansByType(SpanType.AGENT_RUN);
+    expect(exported.errorInfo?.message).toBe('The model provider timed out');
+    expect(exported.endTime).toBeDefined();
   });
 
-  it('[TC-2-9-1] redacts sensitive tokens and credentials from trace output', () => {
-    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
-    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
+  it('[TC-2-9-1] redacts sensitive tokens and credentials from trace output', async () => {
+    const exporter = new TestExporter();
+    const { registry, instance } = buildCapture(exporter, {
+      sensitiveDataFilter: true,
+    });
+    const span = instance.startSpan({
+      name: 'agent run',
+      type: SpanType.AGENT_RUN,
+      requestContext: buildRequestContext(),
+      metadata: { token: 'sk-live-secret-value' },
+    });
 
-    const service = new AgentObservabilityService();
-    const defaults = buildDefaults({ enabled: true, captureContent: true });
-    const registry = service.createRegistry(defaults);
+    span.end();
+    await registry.flush();
 
-    expect(registry).toBeDefined();
-
-    vi.unstubAllEnvs();
+    const [exported] = exporter.getSpansByType(SpanType.AGENT_RUN);
+    expect(exported.metadata.token).not.toBe('sk-live-secret-value');
+    expect(String(exported.metadata.token)).toContain('REDACTED');
   });
 
   it('[TC-2-9-2] continues operation without blocking when telemetry export fails', async () => {
-    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
-    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
+    const failingExporter = {
+      name: 'failing-exporter',
+      exportTracingEvent: async (): Promise<void> => {
+        throw new Error('Langfuse is unreachable');
+      },
+    };
+    const registry = new Observability({
+      configs: {
+        test: {
+          serviceName: 'postiz-agent',
+          exporters: [failingExporter],
+          requestContextKeys: REQUEST_CONTEXT_KEYS,
+        },
+      },
+      configSelector: () => 'test',
+    });
+    const instance = registry.getInstance('test');
+    if (!instance) throw new Error('The test observability instance is missing');
 
-    const service = new AgentObservabilityService();
-    const defaults = buildDefaults({ enabled: true, captureContent: true });
-    service.createRegistry(defaults);
+    const span = instance.startSpan({
+      name: 'agent run',
+      type: SpanType.AGENT_RUN,
+      requestContext: buildRequestContext(),
+    });
+    span.end();
 
-    await expect(service.shutdown()).resolves.toBeUndefined();
-
-    vi.unstubAllEnvs();
+    await expect(registry.flush()).resolves.toBeUndefined();
+    await expect(registry.shutdown()).resolves.toBeUndefined();
   });
 });
 
+type CaptureOptions = {
+  sensitiveDataFilter?: boolean;
+  excludeSpanTypes?: SpanType[];
+};
+
 const buildCapture = (
-  exporter: TestExporter
+  exporter: TestExporter,
+  options: CaptureOptions = {}
 ): { registry: Observability; instance: ObservabilityInstance } => {
   const registry = new Observability({
     configs: {
@@ -156,10 +187,13 @@ const buildCapture = (
         exporters: [exporter],
         requestContextKeys: REQUEST_CONTEXT_KEYS,
         spanOutputProcessors: [inferenceInputProcessor],
+        ...(options.excludeSpanTypes
+          ? { excludeSpanTypes: options.excludeSpanTypes }
+          : {}),
       },
     },
     configSelector: () => 'test',
-    sensitiveDataFilter: false,
+    sensitiveDataFilter: options.sensitiveDataFilter ?? false,
   });
 
   const instance = registry.getInstance('test');
@@ -280,8 +314,55 @@ describe('agent trace attributes', () => {
     await registry.flush();
 
     const [exported] = exporter.getSpansByType(SpanType.AGENT_RUN);
-    expect(resolveAgentVersion('cfg-hash')).toBe('v2.26.0-dg-abc12345');
+    expect(resolveAgentVersion()).toBe('v2.26.0-dg-abc12345');
     expect(exported.metadata.version).toBe('v2.26.0-dg-abc12345');
+
+    vi.unstubAllEnvs();
+    expect(resolveAgentVersion()).toBeUndefined();
+  });
+
+  it('[TC-2-14-1] drops streaming chunks from exported observations', async () => {
+    const exporter = new TestExporter();
+    const { registry, instance } = buildCapture(exporter, {
+      excludeSpanTypes: [SpanType.MODEL_CHUNK],
+    });
+    const requestContext = buildRequestContext();
+
+    const root = instance.startSpan({
+      name: 'agent run',
+      type: SpanType.AGENT_RUN,
+      requestContext,
+    });
+    const chunk = instance.startSpan({
+      name: 'model_chunk',
+      type: SpanType.MODEL_CHUNK,
+      parent: root,
+    });
+    chunk.end();
+    root.end();
+    await registry.flush();
+
+    expect(exporter.getSpansByType(SpanType.MODEL_CHUNK)).toHaveLength(0);
+    expect(exporter.getSpansByType(SpanType.AGENT_RUN)).toHaveLength(1);
+  });
+
+  it('[TC-2-15-1] does not create observations when tracing is disabled', () => {
+    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
+    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
+    const service = new AgentObservabilityService();
+    const registry = service.createRegistry(
+      buildDefaults({ enabled: false, captureContent: true })
+    );
+    const instance = registry.getInstance('disabled');
+    if (!instance) throw new Error('The disabled instance is missing');
+
+    const span = instance.startSpan({
+      name: 'agent run',
+      type: SpanType.AGENT_RUN,
+      requestContext: buildRequestContext(),
+    });
+
+    expect(span.isValid).toBe(false);
 
     vi.unstubAllEnvs();
   });

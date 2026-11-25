@@ -120,10 +120,8 @@ export class AgentRuntimeService {
           observabilityKey
         );
         requestContext.setRaw('organizationId', organizationId);
-        requestContext.setRaw(
-          'version',
-          resolveAgentVersion(bundle.config.defaultsVersion)
-        );
+        const version = resolveAgentVersion();
+        if (version) requestContext.setRaw('version', version);
         requestContext.setRaw('defaultsVersion', bundle.config.defaultsVersion);
       },
     };

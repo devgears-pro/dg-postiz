@@ -1,7 +1,8 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { Observability } from '@mastra/observability';
+import type { ObservabilityInstanceConfig } from '@mastra/observability';
 import { LangfuseExporter } from '@mastra/langfuse';
-import { SpanType } from '@mastra/core/observability';
+import { SamplingStrategyType, SpanType } from '@mastra/core/observability';
 import type { AnySpan, SpanOutputProcessor } from '@mastra/core/observability';
 import type { SystemAgentDefaults } from '@gitroom/helpers/agent/agent.config.schema';
 import type { ResolvedAgentBundle } from '@gitroom/nestjs-libraries/chat/agent.config.service';
@@ -19,8 +20,8 @@ export const REQUEST_CONTEXT_KEYS = [
   'defaultsVersion',
 ];
 
-export const resolveAgentVersion = (defaultsVersion: string): string =>
-  process.env.NEXT_PUBLIC_VERSION?.trim() || defaultsVersion;
+export const resolveAgentVersion = (): string | undefined =>
+  process.env.NEXT_PUBLIC_VERSION?.trim() || undefined;
 
 const hideContentProcessor: SpanOutputProcessor = {
   name: 'postiz-hide-agent-content',
@@ -81,6 +82,8 @@ export const withTenantTags = <T extends TenantSpan>(span: T): T => {
 const noopExporter = {
   name: 'postiz-disabled',
   exportTracingEvent: async (): Promise<void> => undefined,
+  flush: async (): Promise<void> => undefined,
+  shutdown: async (): Promise<void> => undefined,
 };
 
 @Injectable()
@@ -91,9 +94,13 @@ export class AgentObservabilityService implements OnApplicationShutdown {
   createRegistry(defaults: SystemAgentDefaults): Observability {
     if (this._registry) return this._registry;
 
-    const configs: Record<string, Record<string, unknown>> = {
+    const configs: Record<
+      string,
+      Omit<ObservabilityInstanceConfig, 'name'>
+    > = {
       disabled: {
         serviceName: SERVICE_NAME,
+        sampling: { type: SamplingStrategyType.NEVER },
         exporters: [noopExporter],
         requestContextKeys: REQUEST_CONTEXT_KEYS,
       },
@@ -115,12 +122,13 @@ export class AgentObservabilityService implements OnApplicationShutdown {
               publicKey,
               secretKey,
               baseUrl: defaults.langfuse.baseUrl,
-              release: resolveAgentVersion(defaults.defaultsVersion),
+              release: resolveAgentVersion(),
               environment: process.env.NODE_ENV,
               customSpanFormatter: withTenantTags,
             }),
           ],
           requestContextKeys: REQUEST_CONTEXT_KEYS,
+          excludeSpanTypes: [SpanType.MODEL_CHUNK],
           spanOutputProcessors: [
             inferenceInputProcessor,
             ...(defaults.langfuse.captureContent
@@ -132,7 +140,7 @@ export class AgentObservabilityService implements OnApplicationShutdown {
     }
 
     this._registry = new Observability({
-      configs: configs as never,
+      configs,
       configSelector: ({ requestContext }) => {
         const rawKey = requestContext?.getRaw('agentObservabilityKey');
         const key = typeof rawKey === 'string' ? rawKey : undefined;
