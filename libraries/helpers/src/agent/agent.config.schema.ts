@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 export const AGENT_CONFIG_LIMITS = {
-  promptBytes: 64 * 1024,
   skills: 32,
   skillInstructionsBytes: 64 * 1024,
   skillReferences: 16,
@@ -13,7 +12,12 @@ export const AGENT_CONFIG_LIMITS = {
   maxOutputTokens: 200_000,
 } as const;
 
-export type ConfigSource = 'builtin' | 'env' | 'file' | 'organization';
+export type ConfigSource =
+  | 'builtin'
+  | 'env'
+  | 'file'
+  | 'organization'
+  | 'hidden';
 
 export type SkillDefinition = {
   name: string;
@@ -37,8 +41,7 @@ export type GenerationSettings = {
 };
 
 export type AgentConfigOverrides = {
-  systemPrompt?: string;
-  provider?: { baseUrl: string };
+  provider?: { baseUrl?: string };
   model?: string;
   titleModel?: string;
   builtinTools?: string[];
@@ -247,13 +250,6 @@ export const generationSettingsSchema = z
 
 export const agentConfigOverridesSchema = z
   .object({
-    systemPrompt: z
-      .string()
-      .refine(
-        (value) => byteLength(value) <= AGENT_CONFIG_LIMITS.promptBytes,
-        'Prompt is too large'
-      )
-      .optional(),
     provider: z.object({ baseUrl: httpsUrlSchema }).strict().optional(),
     model: modelSchema.optional(),
     titleModel: modelSchema.optional(),
@@ -297,6 +293,18 @@ export const resetAgentConfigSchema = z
   })
   .strict();
 
+export const updateAgentMemorySchema = z
+  .object({
+    proverbs: z.array(z.string().min(1).max(4096)).max(200),
+  })
+  .strict();
+
+export type AgentMemoryView = {
+  proverbs: string[];
+};
+
+export type UpdateAgentMemoryInput = z.infer<typeof updateAgentMemorySchema>;
+
 export const providerTestInputSchema = z
   .object({
     expectedRevision: z.number().int().min(0),
@@ -315,19 +323,9 @@ export const mcpTestInputSchema = z
   })
   .strict();
 
-export type ProviderTestInput = {
-  expectedRevision: number;
-  provider?: { baseUrl: string };
-  model?: string;
-  apiKey?: string;
-};
+export type ProviderTestInput = z.infer<typeof providerTestInputSchema>;
 
-export type McpTestInput = {
-  expectedRevision: number;
-  serverId: string;
-  server: Omit<McpServerDefinition, 'enabledTools'>;
-  bearerToken?: string;
-};
+export type McpTestInput = z.infer<typeof mcpTestInputSchema>;
 
 export const emptyAgentConfigOverrides = (): AgentConfigOverrides => ({});
 
@@ -341,6 +339,14 @@ export function validateOverrides(
     ...Object.keys(defaults.skills),
     ...Object.keys(overrides.skills ?? {}),
   ]);
+  for (const [name, skill] of Object.entries(overrides.skills ?? {})) {
+    if (skill && name in defaults.skills) {
+      issues.push({
+        path: `skills.${name}`,
+        message: 'System skills cannot be redefined',
+      });
+    }
+  }
   let enabledSkills = 0;
   for (const name of skillNames) {
     if (overrides.skills?.[name] === null) continue;
@@ -486,9 +492,7 @@ export function resolveAgentConfig(
   const generation = mergeGeneration(defaults.generation, overrides.generation);
 
   const sources: Record<string, ConfigSource> = {
-    prompt: overrides.systemPrompt !== undefined
-      ? 'organization'
-      : defaults.sources.prompt,
+    prompt: defaults.sources.prompt,
     model: overrides.model !== undefined ? 'organization' : defaults.sources.model,
     titleModel:
       overrides.titleModel !== undefined
@@ -516,7 +520,7 @@ export function resolveAgentConfig(
     organizationId,
     revision,
     defaultsVersion: defaults.defaultsVersion,
-    prompt: overrides.systemPrompt ?? defaults.prompt,
+    prompt: defaults.prompt,
     model,
     titleModel,
     provider: {

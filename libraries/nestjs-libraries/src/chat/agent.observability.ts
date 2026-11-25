@@ -26,7 +26,7 @@ const hideContentProcessor: SpanOutputProcessor = {
 
 const noopExporter = {
   name: 'postiz-disabled',
-  exportTracingEvent: async () => undefined,
+  exportTracingEvent: async (): Promise<void> => undefined,
 };
 
 @Injectable()

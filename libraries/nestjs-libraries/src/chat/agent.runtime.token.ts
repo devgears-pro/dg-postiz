@@ -1,4 +1,3 @@
-import type { RequestContext } from '@mastra/core/di';
 import type { ResolvedAgentConfig } from '@gitroom/helpers/agent/agent.config.schema';
 
 export const AGENT_RUNTIME = Symbol('AGENT_RUNTIME');
@@ -10,8 +9,13 @@ export type PreparedAgentForRuntime = {
   skills: unknown[];
 };
 
+export interface AgentRequestContext {
+  getRaw(key: string): unknown;
+  setRaw(key: string, value: unknown): void;
+}
+
 export type AgentRuntimeLike = {
   ensurePrepared(
-    requestContext: RequestContext<any>
+    requestContext: AgentRequestContext
   ): Promise<PreparedAgentForRuntime>;
 };

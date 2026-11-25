@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   Post,
   Put,
@@ -16,7 +17,9 @@ import {
   mcpTestInputSchema,
   providerTestInputSchema,
   resetAgentConfigSchema,
-  type AgentConfigWriteRequest,
+  updateAgentMemorySchema,
+  type AgentConfigOverrides,
+  type AgentConfigView,
   type McpTestInput,
   type ProviderTestInput,
 } from '@gitroom/helpers/agent/agent.config.schema';
@@ -36,7 +39,7 @@ export class AgentConfigController {
   ) {}
 
   @Get('/')
-  get(@GetOrgFromRequest() organization: Organization) {
+  get(@GetOrgFromRequest() organization: Organization): Promise<AgentConfigView> {
     return this._agentConfigService.getView(organization.id);
   }
 
@@ -57,11 +60,11 @@ export class AgentConfigController {
       });
     }
 
-    return this._agentConfigService.save(
-      organization.id,
-      user?.id ?? null,
-      parsed.data as unknown as AgentConfigWriteRequest
-    );
+    return this._agentConfigService.save(organization.id, user?.id ?? null, {
+      expectedRevision: parsed.data.expectedRevision,
+      overrides: parsed.data.overrides as AgentConfigOverrides,
+      secrets: parsed.data.secrets,
+    });
   }
 
   @Post('/reset')
@@ -88,6 +91,38 @@ export class AgentConfigController {
     );
   }
 
+  @Get('/memory')
+  getMemory(@GetOrgFromRequest() organization: Organization) {
+    return this._agentConfigService.getMemory(organization.id);
+  }
+
+  @Put('/memory')
+  async updateMemory(
+    @GetOrgFromRequest() organization: Organization,
+    @Body() body: unknown
+  ) {
+    const parsed = updateAgentMemorySchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: 'Invalid agent memory update request',
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+      });
+    }
+
+    return this._agentConfigService.updateMemory(
+      organization.id,
+      parsed.data.proverbs
+    );
+  }
+
+  @Delete('/memory')
+  clearMemory(@GetOrgFromRequest() organization: Organization) {
+    return this._agentConfigService.clearMemory(organization.id);
+  }
+
   @Post('/test-provider')
   async testProvider(
     @GetOrgFromRequest() organization: Organization,
@@ -105,10 +140,7 @@ export class AgentConfigController {
     }
 
     await this.assertRevision(organization.id, parsed.data.expectedRevision);
-    return this._connections.testProvider(
-      organization.id,
-      parsed.data as unknown as ProviderTestInput
-    );
+    return this._connections.testProvider(organization.id, parsed.data);
   }
 
   @Post('/test-mcp')
@@ -128,10 +160,7 @@ export class AgentConfigController {
     }
 
     await this.assertRevision(organization.id, parsed.data.expectedRevision);
-    return this._connections.testMcp(
-      organization.id,
-      parsed.data as unknown as McpTestInput
-    );
+    return this._connections.testMcp(organization.id, parsed.data);
   }
 
   private async assertRevision(

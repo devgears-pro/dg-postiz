@@ -6,37 +6,51 @@ import clsx from 'clsx';
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
 import { TopTitle } from '@gitroom/frontend/components/launches/helpers/top.title.component';
 import { array, boolean, object, string } from 'yup';
-import { FormProvider, useForm } from 'react-hook-form';
+import { FormProvider, useForm, useWatch } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { CopilotTextarea } from '@copilotkit/react-textarea';
 import { Select } from '@gitroom/react/form/select';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
+export interface SignatureRecord {
+  id: string;
+  content: string;
+  autoAdd: boolean;
+}
+
+export interface SignatureFormValues {
+  content?: string;
+  autoAdd?: boolean;
+}
+
 export const SignaturesComponent: FC<{
   appendSignature?: (value: string) => void;
 }> = (props) => {
   const { appendSignature } = props;
+  const t = useT();
   const fetch = useFetch();
   const modal = useModals();
   const toaster = useToaster();
   const load = useCallback(async () => {
     return (await fetch('/signatures')).json();
-  }, []);
-  const { data, mutate } = useSWR('signatures', load);
+  }, [fetch]);
+  const { data, mutate } = useSWR<SignatureRecord[]>('signatures', load);
   const addSignature = useCallback(
-    (data?: any) => () => {
+    (data?: SignatureRecord) => () => {
       modal.openModal({
-        title: data ? 'Edit Signature' : 'Add Signature',
+        title: data
+          ? t('edit_signature', 'Edit Signature')
+          : t('add_signature', 'Add Signature'),
         withCloseButton: true,
         children: <AddOrRemoveSignature data={data} reload={mutate} />,
       });
     },
-    [mutate]
+    [modal, mutate, t]
   );
 
   const deleteSignature = useCallback(
-    (data: any) => async () => {
+    (data: SignatureRecord) => async () => {
       if (
         await deleteDialog(
           t(
@@ -50,13 +64,14 @@ export const SignaturesComponent: FC<{
           method: 'DELETE',
         });
         mutate();
-        toaster.show('Signature deleted successfully', 'success');
+        toaster.show(
+          t('signature_deleted', 'Signature deleted successfully'),
+          'success'
+        );
       }
     },
-    []
+    [t, mutate, toaster, fetch]
   );
-
-  const t = useT();
 
   return (
     <div className="flex flex-col">
@@ -90,7 +105,7 @@ export const SignaturesComponent: FC<{
               <div className="text-center mobile:hidden">
                 {t('delete', 'Delete')}
               </div>
-              {data?.map((p: any) => (
+              {data?.map((p: SignatureRecord) => (
                 // a row of the table, a card on phones
                 <div
                   key={p.id}
@@ -106,7 +121,7 @@ export const SignaturesComponent: FC<{
                       <span className="hidden mobile:inline">
                         {t('auto_add', 'Auto Add?')}{' '}
                       </span>
-                      {p.autoAdd ? 'Yes' : 'No'}
+                      {p.autoAdd ? t('yes', 'Yes') : t('no', 'No')}
                     </div>
                   </div>
                   {!!appendSignature && (
@@ -164,10 +179,11 @@ const details = object().shape({
   autoAdd: boolean().required(),
 });
 const AddOrRemoveSignature: FC<{
-  data?: any;
+  data?: SignatureRecord;
   reload: () => void;
 }> = (props) => {
   const { data, reload } = props;
+  const t = useT();
   const toast = useToaster();
   const fetch = useFetch();
   const form = useForm({
@@ -177,28 +193,25 @@ const AddOrRemoveSignature: FC<{
       autoAdd: data?.autoAdd || false,
     },
   });
-  const text = form.watch('content');
-  const autoAdd = form.watch('autoAdd');
+  const text = useWatch({ control: form.control, name: 'content' });
   const modal = useModals();
   const callBack = useCallback(
-    async (values: any) => {
+    async (values: SignatureFormValues) => {
       await fetch(data?.id ? `/signatures/${data.id}` : '/signatures', {
         method: data?.id ? 'PUT' : 'POST',
         body: JSON.stringify(values),
       });
       toast.show(
         data?.id
-          ? 'Signature updated successfully'
-          : 'Signature added successfully',
+          ? t('signature_updated', 'Signature updated successfully')
+          : t('signature_added', 'Signature added successfully'),
         'success'
       );
       modal.closeCurrent();
       reload();
     },
-    [data, modal]
+    [data, modal, t, reload, fetch, toast]
   );
-
-  const t = useT();
 
   return (
     <FormProvider {...form}>

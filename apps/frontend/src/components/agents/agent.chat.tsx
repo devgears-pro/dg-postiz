@@ -31,6 +31,7 @@ import { useParams } from 'next/navigation';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import {
   Message as CopilotMessage,
+  MessageRole,
   TextMessage,
 } from '@copilotkit/runtime-client-gql';
 import { AddEditModal } from '@gitroom/frontend/components/new-launch/add.edit.modal';
@@ -121,26 +122,41 @@ const LoadMessages: FC<{ id: string }> = ({ id }) => {
     null
   );
 
-  const loadMessages = useCallback(async (idToSet: string) => {
-    const data = await (await fetch(`/copilot/${idToSet}/list`)).json();
-    const list = data.messages.map((p: any) => {
-      return new TextMessage({
-        content:
-          p.content.content ||
-          (p.content.parts || [])
-            .map((part: any) => (part.type === 'text' ? part.text : ''))
-            .join(''),
-        role: p.role,
+  const loadMessages = useCallback(
+    async (idToSet: string) => {
+      const data = await (await fetch(`/copilot/${idToSet}/list`)).json();
+      interface RawMessageItem {
+        content: {
+          content?: string;
+          parts?: Array<{ type: string; text?: string }>;
+        };
+        role: 'user' | 'assistant' | 'system';
+      }
+      const toRole = (role: 'user' | 'assistant' | 'system'): MessageRole => {
+        if (role === 'assistant') return MessageRole.Assistant;
+        if (role === 'system') return MessageRole.System;
+        return MessageRole.User;
+      };
+      const list = ((data.messages as RawMessageItem[]) || []).map((p) => {
+        return new TextMessage({
+          content:
+            p.content.content ||
+            (p.content.parts || [])
+              .map((part) => (part.type === 'text' ? part.text || '' : ''))
+              .join(''),
+          role: toRole(p.role),
+        });
       });
-    });
 
-    if (currentId.current !== idToSet) {
-      return;
-    }
+      if (currentId.current !== idToSet) {
+        return;
+      }
 
-    loaded.current = { id: idToSet, messages: list };
-    setMessages(list);
-  }, []);
+      loaded.current = { id: idToSet, messages: list };
+      setMessages(list);
+    },
+    [fetch, setMessages]
+  );
 
   useEffect(() => {
     currentId.current = id;
@@ -151,7 +167,7 @@ const LoadMessages: FC<{ id: string }> = ({ id }) => {
     }
     loaded.current = null;
     loadMessages(id);
-  }, [id]);
+  }, [id, loadMessages, setMessages]);
 
   // CopilotKit resolves loadAgentState to an empty list for Mastra local agents
   // and can clobber the messages we hold, depending on which request resolves last
@@ -168,7 +184,7 @@ const LoadMessages: FC<{ id: string }> = ({ id }) => {
     if (loaded.current.messages.length) {
       setMessages(loaded.current.messages);
     }
-  }, [messages, id]);
+  }, [messages, id, setMessages]);
 
   return null;
 };
@@ -395,12 +411,12 @@ export const Hooks: FC = () => {
 };
 
 const OpenModal: FC<{
-  respond: (value: any) => void;
+  respond: (value: unknown) => void;
   args: {
     list: {
       integrationId: string;
       date: string;
-      settings?: Record<string, any>;
+      settings?: object;
       posts: { content: string; attachments: { id: string; path: string }[] }[];
     }[];
   };
@@ -477,11 +493,11 @@ const OpenModal: FC<{
     }
 
     respond('User scheduled all the posts');
-  }, [args, respond, properties]);
+  }, [args, respond, properties, modals]);
 
   useEffect(() => {
     startModal();
-  }, []);
+  }, [startModal]);
   return (
     <div onClick={() => respond('continue')}>
       Opening manually ${JSON.stringify(args)}

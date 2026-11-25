@@ -1,11 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import type {
   AgentConfigOverrides,
   SystemAgentDefaults,
 } from '@gitroom/helpers/agent/agent.config.schema';
 import { AgentConfigService } from '../agent.config.service';
-import type { AgentConfigRecord } from '../../database/prisma/agent-config/agent.config.repository';
+import {
+  AgentConfigRepository,
+  type AgentConfigRecord,
+} from '../../database/prisma/agent-config/agent.config.repository';
+import type { AgentDefaultsProvider } from '../agent.defaults.token';
 import { SkillSaveTool } from './skill.save.tool';
 import { SkillRemoveTool } from './skill.remove.tool';
 import { SkillsListTool } from './skills.list.tool';
@@ -41,54 +45,69 @@ const mockDefaults: SystemAgentDefaults = {
   defaultsVersion: 'test-version',
 };
 
-const createMockRepo = () => {
-  const store = new Map<string, AgentConfigRecord>();
+class MockAgentConfigRepository extends AgentConfigRepository {
+  private readonly store = new Map<string, AgentConfigRecord>();
 
-  return {
-    find: vi.fn(async (orgId: string) => store.get(orgId) ?? null),
-    create: vi.fn(async (input: { organizationId: string; overrides: AgentConfigOverrides }) => {
-      const record: AgentConfigRecord = {
-        organizationId: input.organizationId,
-        schemaVersion: 1,
-        revision: 1,
-        overrides: input.overrides,
-        encryptedSecrets: null,
-        secretSummary: null,
-        updatedById: null,
-      };
-      store.set(input.organizationId, record);
-      return record;
-    }),
-    update: vi.fn(async (orgId: string, revision: number, input: { overrides: AgentConfigOverrides }) => {
-      const existing = store.get(orgId);
-      const record: AgentConfigRecord = {
-        organizationId: orgId,
-        schemaVersion: 1,
-        revision: (existing?.revision ?? revision) + 1,
-        overrides: input.overrides,
-        encryptedSecrets: null,
-        secretSummary: null,
-        updatedById: null,
-      };
-      store.set(orgId, record);
-      return record;
-    }),
-    _store: store,
-  };
-};
+  constructor() {
+    super({} as unknown as ConstructorParameters<typeof AgentConfigRepository>[0]);
+  }
+
+  override async find(orgId: string): Promise<AgentConfigRecord | null> {
+    return this.store.get(orgId) ?? null;
+  }
+
+  override async create(input: {
+    organizationId: string;
+    overrides: AgentConfigOverrides;
+  }): Promise<AgentConfigRecord> {
+    const record: AgentConfigRecord = {
+      organizationId: input.organizationId,
+      schemaVersion: 1,
+      revision: 1,
+      overrides: input.overrides,
+      encryptedSecrets: null,
+      secretSummary: null,
+      updatedById: null,
+    };
+    this.store.set(input.organizationId, record);
+    return record;
+  }
+
+  override async update(
+    orgId: string,
+    revision: number,
+    input: { overrides: AgentConfigOverrides }
+  ): Promise<AgentConfigRecord | null> {
+    const existing = this.store.get(orgId);
+    const record: AgentConfigRecord = {
+      organizationId: orgId,
+      schemaVersion: 1,
+      revision: (existing?.revision ?? revision) + 1,
+      overrides: input.overrides,
+      encryptedSecrets: null,
+      secretSummary: null,
+      updatedById: null,
+    };
+    this.store.set(orgId, record);
+    return record;
+  }
+}
 
 describe('Agent Skills Management', () => {
   const setup = () => {
-    const repo = createMockRepo();
-    const defaultsProvider = { get: async () => mockDefaults };
-    const service = new AgentConfigService(repo as any, defaultsProvider as any);
+    const repo = new MockAgentConfigRepository();
+    const defaultsProvider: AgentDefaultsProvider = {
+      get: async () => mockDefaults,
+    };
+    const service = new AgentConfigService(repo, defaultsProvider);
     const saveTool = new SkillSaveTool(service);
     const removeTool = new SkillRemoveTool(service);
     const listTool = new SkillsListTool(service);
 
     const makeContext = (orgId: string) => ({
       requestContext: {
-        get: (key: string) => (key === 'organization' ? JSON.stringify({ id: orgId }) : undefined),
+        get: (key: string) =>
+          key === 'organization' ? JSON.stringify({ id: orgId }) : undefined,
       },
     });
 
@@ -215,7 +234,7 @@ describe('Agent Skills Management', () => {
           description: 'Client tone of voice',
           instructions: 'Speak clearly and concisely.',
         },
-        context as any
+        context
       );
 
       expect(successRes).toEqual({
@@ -234,7 +253,7 @@ describe('Agent Skills Management', () => {
           description: 'Collision',
           instructions: 'Should fail',
         },
-        context as any
+        context
       );
 
       expect(errRes.output).toHaveProperty('errors');
@@ -250,11 +269,11 @@ describe('Agent Skills Management', () => {
           description: 'Temp',
           instructions: 'Temp instructions',
         },
-        context as any
+        context
       );
 
       const remove = removeTool.run();
-      const okRes = await remove.execute({ name: 'temp-skill' }, context as any);
+      const okRes = await remove.execute({ name: 'temp-skill' }, context);
       expect(okRes).toEqual({
         output: {
           success: true,
@@ -262,7 +281,7 @@ describe('Agent Skills Management', () => {
         },
       });
 
-      const errRes = await remove.execute({ name: 'humanizer' }, context as any);
+      const errRes = await remove.execute({ name: 'humanizer' }, context);
       expect(errRes.output).toHaveProperty('errors');
     });
 
@@ -276,14 +295,14 @@ describe('Agent Skills Management', () => {
           description: 'Custom description',
           instructions: 'Full custom instructions',
         },
-        context as any
+        context
       );
 
       const list = listTool.run();
-      const allRes = await list.execute({}, context as any);
+      const allRes = await list.execute({}, context);
       expect(allRes.output.skills.length).toBe(3);
 
-      const filteredRes = await list.execute({ name: 'my-custom-skill' }, context as any);
+      const filteredRes = await list.execute({ name: 'my-custom-skill' }, context);
       expect(filteredRes.output.skills.length).toBe(1);
       expect(filteredRes.output.skills[0].name).toBe('my-custom-skill');
       expect(filteredRes.output.skills[0].instructions).toBe('Full custom instructions');

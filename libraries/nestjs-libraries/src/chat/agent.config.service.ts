@@ -14,6 +14,7 @@ import {
   type AgentConfigOverrides,
   type AgentConfigView,
   type AgentConfigWriteRequest,
+  type AgentMemoryView,
   type CredentialStatus,
   type ResolvedAgentConfig,
   type SecretChanges,
@@ -32,6 +33,7 @@ import {
 import {
   AgentConfigRepository,
   type AgentConfigRecord,
+  type AgentConfigWrite,
 } from '@gitroom/nestjs-libraries/database/prisma/agent-config/agent.config.repository';
 import {
   AGENT_DEFAULTS,
@@ -182,12 +184,14 @@ export class AgentConfigService {
       organizationId,
       revision
     );
-    this.assertCredentialsMatch(config, secrets);
+    this.assertSecretChanges(config, input.secrets);
+    const keptSecrets = this.pruneOrphanedSecrets(config, secrets);
+    this.assertSecretsPresent(config, keptSecrets);
 
-    const encryptedSecrets = isEmptyAgentSecrets(secrets)
+    const encryptedSecrets = isEmptyAgentSecrets(keptSecrets)
       ? null
-      : encryptAgentSecrets(organizationId, secrets, encryptionKey());
-    const secretSummary = summarizeAgentSecrets(secrets);
+      : encryptAgentSecrets(organizationId, keptSecrets, encryptionKey());
+    const secretSummary = summarizeAgentSecrets(keptSecrets);
 
     const saved = record
       ? await this._repository.update(organizationId, revision, {
@@ -224,7 +228,7 @@ export class AgentConfigService {
       );
     }
 
-    const write = {
+    const write: Omit<AgentConfigWrite, 'organizationId'> = {
       overrides: {},
       encryptedSecrets: null,
       secretSummary: emptySummary(),
@@ -234,6 +238,8 @@ export class AgentConfigService {
     const saved = record
       ? await this._repository.update(organizationId, revision, write)
       : await this._repository.create({ organizationId, ...write });
+
+    await this._repository.clearMemory(organizationId);
 
     return this.buildView(defaults, saved);
   }
@@ -359,6 +365,24 @@ export class AgentConfigService {
     }));
   }
 
+  async getMemory(organizationId: string): Promise<AgentMemoryView> {
+    const proverbs = await this._repository.getMemory(organizationId);
+    return { proverbs };
+  }
+
+  async updateMemory(
+    organizationId: string,
+    proverbs: string[]
+  ): Promise<AgentMemoryView> {
+    const updated = await this._repository.updateMemory(organizationId, proverbs);
+    return { proverbs: updated };
+  }
+
+  async clearMemory(organizationId: string): Promise<AgentMemoryView> {
+    await this._repository.clearMemory(organizationId);
+    return { proverbs: [] };
+  }
+
   private applyRuntimeCredentials(
     config: ResolvedAgentConfig,
     secrets: AgentSecrets
@@ -373,7 +397,59 @@ export class AgentConfigService {
     };
   }
 
-  private assertCredentialsMatch(
+  private assertSecretChanges(
+    config: ResolvedAgentConfig,
+    changes: SecretChanges | undefined
+  ): void {
+    if (
+      config.provider.credential === 'system' &&
+      typeof changes?.providerApiKey === 'string'
+    ) {
+      throw new BadRequestException({
+        message: 'Set a provider URL before adding your own provider API key',
+      });
+    }
+
+    const serverIds = new Set(config.mcpServers.map((server) => server.id));
+    for (const [id, token] of Object.entries(changes?.mcpBearerTokens ?? {})) {
+      if (typeof token === 'string' && !serverIds.has(id)) {
+        throw new BadRequestException({
+          message: `MCP token ${id} does not match any configured server`,
+        });
+      }
+    }
+  }
+
+  private pruneOrphanedSecrets(
+    config: ResolvedAgentConfig,
+    secrets: AgentSecrets
+  ): AgentSecrets {
+    const next: AgentSecrets = {
+      ...secrets,
+      ...(secrets.mcpBearerTokens
+        ? { mcpBearerTokens: { ...secrets.mcpBearerTokens } }
+        : {}),
+    };
+
+    if (config.provider.credential !== 'organization') {
+      delete next.providerApiKey;
+    }
+
+    const serverIds = new Set(config.mcpServers.map((server) => server.id));
+    for (const id of Object.keys(next.mcpBearerTokens ?? {})) {
+      if (!serverIds.has(id)) {
+        delete next.mcpBearerTokens?.[id];
+      }
+    }
+
+    if (next.mcpBearerTokens && Object.keys(next.mcpBearerTokens).length === 0) {
+      delete next.mcpBearerTokens;
+    }
+
+    return next;
+  }
+
+  private assertSecretsPresent(
     config: ResolvedAgentConfig,
     secrets: AgentSecrets
   ): void {
@@ -382,22 +458,6 @@ export class AgentConfigService {
         message:
           'A custom provider requires its own API key; the deployment key is never sent to another endpoint',
       });
-    }
-
-    if (config.provider.credential === 'system' && secrets.providerApiKey) {
-      throw new BadRequestException({
-        message:
-          'Set a provider URL before adding your own provider API key',
-      });
-    }
-
-    const serverIds = new Set(config.mcpServers.map((server) => server.id));
-    for (const id of Object.keys(secrets.mcpBearerTokens ?? {})) {
-      if (!serverIds.has(id)) {
-        throw new BadRequestException({
-          message: `MCP token ${id} does not match any configured server`,
-        });
-      }
     }
 
     for (const server of config.mcpServers) {

@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { createSkill } from '@mastra/core/skills';
-import type { RequestContext } from '@mastra/core/di';
 import type {
   ResolvedAgentConfig,
   ResolvedSkill,
@@ -16,6 +15,7 @@ import {
 } from '@gitroom/nestjs-libraries/chat/agent.connections';
 import { AgentObservabilityService } from '@gitroom/nestjs-libraries/chat/agent.observability';
 import { LoadToolsService } from '@gitroom/nestjs-libraries/chat/load.tools.service';
+import type { AgentRequestContext } from '@gitroom/nestjs-libraries/chat/agent.runtime.token';
 
 export const AGENT_CONTEXT_KEYS = {
   prepared: 'agentPrepared',
@@ -33,7 +33,7 @@ export type AgentRuntimeOptions = {
 };
 
 export type AgentPrepared = {
-  bundle: ResolvedAgentBundle;
+  bundle?: ResolvedAgentBundle;
   config: ResolvedAgentConfig;
   model: AgentModel;
   titleModel: AgentModel;
@@ -41,7 +41,7 @@ export type AgentPrepared = {
   skills: unknown[];
   observabilityKey: string;
   release: () => Promise<void>;
-  applyTo: (requestContext: RequestContext<any>) => void;
+  applyTo: (requestContext: AgentRequestContext) => void;
 };
 
 const toInlineSkill = (skill: ResolvedSkill) =>
@@ -77,7 +77,10 @@ export class AgentRuntimeService {
     );
 
     const mcp = options.external
-      ? { tools: {} as Record<string, unknown>, release: async () => undefined }
+      ? {
+          tools: {} as Record<string, unknown>,
+          release: async (): Promise<void> => undefined,
+        }
       : await this._connections.acquireMcp(bundle);
 
     for (const name of Object.keys(mcp.tools)) {
@@ -106,30 +109,45 @@ export class AgentRuntimeService {
         await mcp.release();
       },
       applyTo: (requestContext) => {
-        requestContext.set(AGENT_CONTEXT_KEYS.prepared, true);
-        requestContext.set(AGENT_CONTEXT_KEYS.config, bundle.config);
-        requestContext.set(AGENT_CONTEXT_KEYS.model, model);
-        requestContext.set(AGENT_CONTEXT_KEYS.titleModel, titleModel);
-        requestContext.set(AGENT_CONTEXT_KEYS.tools, tools);
-        requestContext.set(AGENT_CONTEXT_KEYS.skills, skills);
-        requestContext.set(AGENT_CONTEXT_KEYS.observability, observabilityKey);
-        requestContext.set('organizationId', organizationId);
+        requestContext.setRaw(AGENT_CONTEXT_KEYS.prepared, true);
+        requestContext.setRaw(AGENT_CONTEXT_KEYS.config, bundle.config);
+        requestContext.setRaw(AGENT_CONTEXT_KEYS.model, model);
+        requestContext.setRaw(AGENT_CONTEXT_KEYS.titleModel, titleModel);
+        requestContext.setRaw(AGENT_CONTEXT_KEYS.tools, tools);
+        requestContext.setRaw(AGENT_CONTEXT_KEYS.skills, skills);
+        requestContext.setRaw(
+          AGENT_CONTEXT_KEYS.observability,
+          observabilityKey
+        );
+        requestContext.setRaw('organizationId', organizationId);
       },
     };
   }
 
-  async ensurePrepared(requestContext: RequestContext<any>): Promise<AgentPrepared> {
-    if (requestContext.get(AGENT_CONTEXT_KEYS.prepared)) {
+  async ensurePrepared(
+    requestContext: AgentRequestContext
+  ): Promise<AgentPrepared> {
+    if (requestContext.getRaw(AGENT_CONTEXT_KEYS.prepared)) {
       return {
-        bundle: undefined as unknown as ResolvedAgentBundle,
-        config: requestContext.get(AGENT_CONTEXT_KEYS.config),
-        model: requestContext.get(AGENT_CONTEXT_KEYS.model),
-        titleModel: requestContext.get(AGENT_CONTEXT_KEYS.titleModel),
-        tools: requestContext.get(AGENT_CONTEXT_KEYS.tools) ?? {},
-        skills: requestContext.get(AGENT_CONTEXT_KEYS.skills) ?? [],
+        config: requestContext.getRaw(
+          AGENT_CONTEXT_KEYS.config
+        ) as ResolvedAgentConfig,
+        model: requestContext.getRaw(AGENT_CONTEXT_KEYS.model) as AgentModel,
+        titleModel: requestContext.getRaw(
+          AGENT_CONTEXT_KEYS.titleModel
+        ) as AgentModel,
+        tools:
+          (requestContext.getRaw(AGENT_CONTEXT_KEYS.tools) as Record<
+            string,
+            unknown
+          >) ?? {},
+        skills:
+          (requestContext.getRaw(AGENT_CONTEXT_KEYS.skills) as unknown[]) ?? [],
         observabilityKey:
-          requestContext.get(AGENT_CONTEXT_KEYS.observability) ?? 'disabled',
-        release: async () => undefined,
+          (requestContext.getRaw(AGENT_CONTEXT_KEYS.observability) as
+            | string
+            | undefined) ?? 'disabled',
+        release: async (): Promise<void> => undefined,
         applyTo: () => undefined,
       };
     }
@@ -142,7 +160,7 @@ export class AgentRuntimeService {
     }
 
     const prepared = await this.prepare(organization.id, {
-      ui: requestContext.get('ui') === 'true',
+      ui: requestContext.getRaw('ui') === 'true',
       external: true,
     });
     prepared.applyTo(requestContext);

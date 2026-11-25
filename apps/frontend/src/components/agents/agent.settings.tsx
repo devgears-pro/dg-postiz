@@ -6,15 +6,13 @@ import type { KeyedMutator } from 'swr';
 import type {
   AgentConfigOverrides,
   AgentConfigView,
+  McpServerDefinition,
   SecretChanges,
 } from '@gitroom/helpers/agent/agent.config.schema';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useUser } from '@gitroom/frontend/components/layout/user.context';
 import {
   isDirty,
-  promptEditorState,
-  resetPrompt,
-  setPrompt,
   setProvider,
   toWriteRequest,
 } from '@gitroom/frontend/components/agents/agent.settings.state';
@@ -24,6 +22,7 @@ import {
   type AgentSettingsSection,
 } from '@gitroom/frontend/components/agents/agent.settings.sections';
 import { AgentSkillsSettings } from '@gitroom/frontend/components/agents/agent.skills.settings';
+import { AgentMemorySettings } from '@gitroom/frontend/components/agents/agent.memory.settings';
 import { AgentMcpSettings } from '@gitroom/frontend/components/agents/agent.mcp.settings';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 
@@ -44,7 +43,7 @@ export const AgentSettings: FC = () => {
 
   const load = useCallback(
     async () => (await fetch('/agent-config')).json(),
-    []
+    [fetch]
   );
   const { data: view, error, isLoading, mutate } = useSWR<AgentConfigView>(
     orgId ? ['agent-config', orgId] : null,
@@ -102,8 +101,6 @@ const AgentSettingsForm: FC<{
   const builtinSelected = new Set(
     overrides.builtinTools ?? view.effective.builtinTools ?? []
   );
-
-  const promptState = promptEditorState(view, overrides);
 
   const save = async () => {
     setSaving(true);
@@ -187,7 +184,11 @@ const AgentSettingsForm: FC<{
     );
   };
 
-  const testMcp = async (id: string, server: any, token?: string) => {
+  const testMcp = async (
+    id: string,
+    server: McpServerDefinition,
+    token?: string
+  ) => {
     const response = await fetch('/agent-config/test-mcp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -253,39 +254,6 @@ const AgentSettingsForm: FC<{
           {status.text}
         </div>
       )}
-
-      <section className="flex flex-col gap-[8px]">
-        <div className="flex items-center gap-[8px] flex-wrap">
-          <h3 className="text-[18px] font-[500] flex-1">
-            {t('agent_prompt_title', 'System prompt')}
-          </h3>
-          {promptState.edited && (
-            <>
-              <span className="text-[11px] text-[#c9a7ff] bg-[#612bd3]/20 border border-[#4a2a86] rounded-full px-[8px] py-[1px]">
-                {t('agent_prompt_edited', 'Edited')}
-              </span>
-              <button
-                type="button"
-                className="text-[12px] underline opacity-60 hover:opacity-100"
-                onClick={() => setOverrides(resetPrompt(overrides))}
-              >
-                {t('agent_prompt_reset', 'Reset')}
-              </button>
-            </>
-          )}
-          <span className="text-[12px] opacity-60">
-            {t('agent_source', 'source')}: {view.sources.prompt}
-          </span>
-        </div>
-        <textarea
-          rows={14}
-          className={inputClass}
-          value={promptState.value}
-          onChange={(event) =>
-            setOverrides(setPrompt(overrides, event.target.value))
-          }
-        />
-      </section>
 
       <section className="flex flex-col gap-[8px]">
         <h3 className="text-[18px] font-[500]" data-agent-section="model">
@@ -380,6 +348,8 @@ const AgentSettingsForm: FC<{
           </button>
         </div>
       </section>
+
+      <AgentMemorySettings />
 
       <section className="flex flex-col gap-[8px]">
         <h3 className="text-[18px] font-[500]" data-agent-section="tools">

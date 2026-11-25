@@ -21,12 +21,13 @@ export const AgentSkillsSettings: FC<{
 }> = ({ view, overrides, onChange }) => {
   const t = useT();
   const [editing, setEditing] = useState<SkillDefinition | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const skills = formSkills({ ...view, overrides });
 
   return (
     <section className="flex flex-col gap-[12px]">
       <header>
-        <h3 className="text-[18px] font-[500]">
+        <h3 className="text-[18px] font-[500]" data-agent-section="skills">
           {t('agent_skills_title', 'Skills')}
         </h3>
         <p className="text-[14px] opacity-70">
@@ -40,6 +41,7 @@ export const AgentSkillsSettings: FC<{
       {skills.map((skill) => (
         <div
           key={skill.name}
+          data-skill={skill.name}
           className="flex flex-col gap-[6px] border border-newTableBorder rounded-[8px] p-[12px]"
         >
           <div className="flex items-center gap-[8px] flex-wrap">
@@ -68,16 +70,73 @@ export const AgentSkillsSettings: FC<{
                 {t('agent_enabled', 'Enabled')}
               </label>
             ) : (
-              <button
-                type="button"
-                className="text-[14px] underline"
-                onClick={() => onChange(removeSkill(view, overrides, skill.name))}
-              >
-                {t('agent_remove', 'Remove')}
-              </button>
+              <div className="flex items-center gap-[8px]">
+                <button
+                  type="button"
+                  className="text-[13px] underline opacity-80 hover:opacity-100"
+                  onClick={() => setEditing(skill)}
+                >
+                  {t('agent_edit', 'Edit')}
+                </button>
+                <button
+                  type="button"
+                  className="text-[13px] underline text-red-400 opacity-80 hover:opacity-100"
+                  onClick={() => onChange(removeSkill(view, overrides, skill.name))}
+                >
+                  {t('agent_remove', 'Remove')}
+                </button>
+              </div>
             )}
           </div>
           <p className="text-[14px] opacity-80">{skill.description}</p>
+          <div className="flex items-center gap-[8px] mt-[4px]">
+            <button
+              type="button"
+              className="text-[12px] underline opacity-70 hover:opacity-100"
+              onClick={() =>
+                setExpanded((prev) => ({
+                  ...prev,
+                  [skill.name]: !prev[skill.name],
+                }))
+              }
+            >
+              {expanded[skill.name]
+                ? t('agent_skill_hide_instructions', 'Hide instructions')
+                : t('agent_skill_view_instructions', 'View instructions')}
+            </button>
+          </div>
+
+          {expanded[skill.name] && (
+            <div className="mt-[8px] bg-newBgColorInner border border-newTableBorder rounded-[6px] p-[10px]">
+              <div className="text-[12px] font-semibold opacity-70 mb-[4px]">
+                {t('agent_skill_instructions_preview', 'Instructions:')}
+              </div>
+              <pre className="text-[13px] whitespace-pre-wrap font-mono opacity-90 max-h-[300px] overflow-auto">
+                {skill.instructions}
+              </pre>
+              {skill.references && Object.keys(skill.references).length > 0 && (
+                <div className="mt-[8px] border-t border-newTableBorder pt-[8px]">
+                  <div className="text-[12px] font-semibold opacity-70 mb-[4px]">
+                    {t('agent_skill_references', 'References:')}
+                  </div>
+                  <div className="flex flex-col gap-[6px]">
+                    {Object.entries(skill.references).map(
+                      ([refName, refContent]) => (
+                        <details key={refName} className="text-[12px]">
+                          <summary className="cursor-pointer font-mono font-medium opacity-80 hover:opacity-100">
+                            {refName}
+                          </summary>
+                          <pre className="mt-[4px] p-[6px] bg-black/10 rounded-[4px] whitespace-pre-wrap font-mono max-h-[200px] overflow-auto">
+                            {refContent}
+                          </pre>
+                        </details>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ))}
 
@@ -116,6 +175,7 @@ const SkillEditor: FC<{
 }> = ({ value, onSave, onCancel }) => {
   const t = useT();
   const [skill, setSkill] = useState(value);
+  const isNew = !value.name;
   const valid =
     /^[a-z0-9][a-z0-9-]{0,63}$/.test(skill.name) &&
     skill.description.trim().length > 0 &&
@@ -124,7 +184,10 @@ const SkillEditor: FC<{
   return (
     <div className="flex flex-col gap-[8px] border border-newTableBorder rounded-[8px] p-[12px]">
       <input
-        className="bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[12px] py-[8px]"
+        disabled={!isNew}
+        className={`bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[12px] py-[8px] ${
+          !isNew ? 'opacity-60 cursor-not-allowed' : ''
+        }`}
         placeholder={t('agent_skill_name', 'Name, lowercase with hyphens')}
         value={skill.name}
         onChange={(event) => setSkill({ ...skill, name: event.target.value })}
@@ -153,7 +216,7 @@ const SkillEditor: FC<{
           className="bg-btnPrimary text-white rounded-[8px] px-[14px] py-[8px] disabled:opacity-40"
           onClick={() => onSave(skill)}
         >
-          {t('agent_save', 'Save')}
+          {t('agent_apply', 'Apply')}
         </button>
         <button
           type="button"

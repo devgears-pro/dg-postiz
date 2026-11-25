@@ -109,13 +109,13 @@ export class CopilotController {
     requestContext.set('organization', JSON.stringify(organization));
     requestContext.set('ui', 'true');
     const threadId = req?.body?.threadId || req?.body?.body?.threadId;
-    if (threadId) requestContext.set('threadId' as never, threadId as never);
+    if (threadId) requestContext.setRaw('threadId', threadId);
     prepared.applyTo(requestContext);
 
     const agents = MastraAgent.getLocalAgents({
       resourceId: organization.id,
       mastra,
-      requestContext: requestContext as any,
+      requestContext: requestContext as unknown as RequestContext,
     });
 
     const runtime = new CopilotRuntime({
@@ -149,7 +149,7 @@ export class CopilotController {
   async getMessagesList(
     @GetOrgFromRequest() organization: Organization,
     @Param('thread') threadId: string
-  ): Promise<any> {
+  ): Promise<unknown> {
     const mastra = await this._mastraService.mastra();
     const memory = await mastra.getAgent('postiz').getMemory();
     try {

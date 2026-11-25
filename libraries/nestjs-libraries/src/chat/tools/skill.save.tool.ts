@@ -3,12 +3,17 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { Injectable } from '@nestjs/common';
 import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
+import {
+  canManageSkills,
+  readOrganizationAccess,
+} from '@gitroom/nestjs-libraries/chat/agent.access';
 import { AgentConfigService } from '@gitroom/nestjs-libraries/chat/agent.config.service';
 
 @Injectable()
 export class SkillSaveTool implements AgentToolInterface {
   constructor(private _agentConfigService: AgentConfigService) {}
   name = 'skillSaveTool';
+  optionalOnSelfHosted = true;
 
   run() {
     return createTool({
@@ -60,13 +65,25 @@ System skills (such as dg-marketing, social, humanizer, write-humans) cannot be 
       }),
       execute: async (inputData, context) => {
         checkAuth(inputData, context);
-        const orgRaw = (context?.requestContext as any)?.get('organization');
-        const organizationId =
-          typeof orgRaw === 'string' ? JSON.parse(orgRaw).id : orgRaw?.id;
+        const organization = readOrganizationAccess(
+          context as { requestContext?: { get?: (key: string) => unknown } }
+        );
+
+        if (!organization?.id) {
+          return { output: { errors: 'Organization context is missing' } };
+        }
+
+        if (!canManageSkills(organization)) {
+          return {
+            output: {
+              errors: 'Only organization administrators can manage skills',
+            },
+          };
+        }
 
         try {
           const saved = await this._agentConfigService.saveSkill(
-            organizationId,
+            organization.id,
             inputData
           );
           return {
@@ -78,8 +95,9 @@ System skills (such as dg-marketing, social, humanizer, write-humans) cannot be 
               },
             },
           };
-        } catch (err: any) {
-          const message = err?.message || 'Failed to save skill';
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : 'Failed to save skill';
           return { output: { errors: message } };
         }
       },

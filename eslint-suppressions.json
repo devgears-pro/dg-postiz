@@ -312,11 +312,6 @@
       "count": 1
     }
   },
-  "apps/frontend/src/components/settings/signatures.component.tsx": {
-    "react-hooks/immutability": {
-      "count": 1
-    }
-  },
   "apps/frontend/tailwind.config.cjs": {
     "@typescript-eslint/no-require-imports": {
       "count": 3
