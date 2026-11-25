@@ -19,24 +19,39 @@ export type TraceIdentity = {
 
 const THREAD_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
+const RUN_METHODS = new Set(['agent/run', 'agent/suggest', 'agent/connect']);
+
+const readValidThreadId = (value: unknown): string => {
+  if (typeof value !== 'string' || !THREAD_ID_PATTERN.test(value)) {
+    throw new BadRequestException('Invalid conversation id');
+  }
+
+  return value;
+};
+
 export const readThreadId = (payload: unknown): string | undefined => {
   if (!payload || typeof payload !== 'object') return undefined;
 
   const threadId = (payload as { threadId?: unknown }).threadId;
   if (threadId === undefined) return undefined;
 
-  if (typeof threadId !== 'string' || !THREAD_ID_PATTERN.test(threadId)) {
-    throw new BadRequestException('Invalid conversation id');
-  }
-
-  return threadId;
+  return readValidThreadId(threadId);
 };
 
-export const readRunThreadId = (
+export const readRequestThreadId = (
   method: unknown,
-  rawBody: unknown
+  rawBody: unknown,
+  rawParams: unknown
 ): string | undefined => {
-  if (method !== 'agent/run') return undefined;
+  if (method === 'agent/stop') {
+    if (!rawParams || typeof rawParams !== 'object') {
+      throw new BadRequestException('Invalid run payload');
+    }
+
+    return readValidThreadId((rawParams as { threadId?: unknown }).threadId);
+  }
+
+  if (typeof method !== 'string' || !RUN_METHODS.has(method)) return undefined;
 
   let payload: unknown = rawBody;
   if (typeof rawBody === 'string') {
@@ -51,7 +66,12 @@ export const readRunThreadId = (
     throw new BadRequestException('Invalid run payload');
   }
 
-  return readThreadId(payload);
+  const threadId = readThreadId(payload);
+  if (!threadId) {
+    throw new BadRequestException('Invalid conversation id');
+  }
+
+  return threadId;
 };
 
 export const buildSessionId = (
@@ -76,6 +96,17 @@ export const applyTraceIdentity = (
   }
 
   if (userId) requestContext.setRaw('userId', userId);
+};
+
+export const loadThreadMemory = async <T>(
+  loader: () => Promise<T | undefined>
+): Promise<T | undefined> => {
+  try {
+    return await loader();
+  } catch (error) {
+    Logger.warn(`Could not load the conversation store: ${error}`);
+    throw new ServiceUnavailableException('Could not verify the conversation');
+  }
 };
 
 export const assertThreadAccess = async (

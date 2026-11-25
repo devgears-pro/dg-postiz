@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RequestContext } from '@mastra/core/di';
 import { SpanType } from '@mastra/core/observability';
 import type { ObservabilityInstance } from '@mastra/core/observability';
@@ -8,7 +8,7 @@ import type { ResolvedAgentBundle } from './agent.config.service';
 import {
   AgentObservabilityService,
   REQUEST_CONTEXT_KEYS,
-  inferenceInputProcessor,
+  buildTraceConfig,
   resolveAgentVersion,
   withTenantTags,
 } from './agent.observability';
@@ -32,6 +32,10 @@ vi.mock('@mastra/langfuse', () => ({
 
 afterEach(() => {
   vi.unstubAllEnvs();
+});
+
+beforeEach(() => {
+  langfuseExporterOptions.length = 0;
 });
 
 const buildDefaults = (options: {
@@ -151,21 +155,35 @@ describe('AgentObservabilityService', () => {
     const instance = probe.getInstance('probe');
     if (!instance) throw new Error('The probe instance is missing');
 
-    const span = instance.startSpan({
+    const requestContext = buildRequestContext();
+    const agentSpan = instance.startSpan({
       name: 'agent run',
       type: SpanType.AGENT_RUN,
       input: { messages: [{ role: 'user', content: 'secret request' }] },
-      attributes: { instructions: 'secret system prompt' },
-      requestContext: buildRequestContext(),
+      attributes: {
+        instructions: 'secret system prompt',
+        prompt: 'secret prompt',
+      },
+      requestContext,
     });
-    span.update({ output: { text: 'secret answer' } });
-    span.end();
+    agentSpan.update({ output: { text: 'secret answer' } });
+    agentSpan.end();
+    const generationSpan = instance.startSpan({
+      name: 'model_generation',
+      type: SpanType.MODEL_GENERATION,
+      attributes: { tools: [{ name: 'secretTool' }] },
+      requestContext,
+    });
+    generationSpan.end();
     await probe.flush();
 
     const [exported] = exporter.getSpansByType(SpanType.AGENT_RUN);
+    const [generation] = exporter.getSpansByType(SpanType.MODEL_GENERATION);
     expect(exported.input).toBeUndefined();
     expect(exported.output).toBeUndefined();
     expect(exported.attributes?.instructions).toBeUndefined();
+    expect(exported.attributes?.prompt).toBeUndefined();
+    expect(generation.attributes?.tools).toBeUndefined();
   });
 
   it('[TC-2-8-1] records error status and failure details in trace spans', async () => {
@@ -242,7 +260,7 @@ describe('AgentObservabilityService', () => {
 
 type CaptureOptions = {
   sensitiveDataFilter?: boolean;
-  excludeSpanTypes?: SpanType[];
+  captureContent?: boolean;
 };
 
 const buildCapture = (
@@ -251,15 +269,7 @@ const buildCapture = (
 ): { registry: Observability; instance: ObservabilityInstance } => {
   const registry = new Observability({
     configs: {
-      test: {
-        serviceName: 'postiz-agent',
-        exporters: [exporter],
-        requestContextKeys: REQUEST_CONTEXT_KEYS,
-        spanOutputProcessors: [inferenceInputProcessor],
-        ...(options.excludeSpanTypes
-          ? { excludeSpanTypes: options.excludeSpanTypes }
-          : {}),
-      },
+      test: buildTraceConfig(exporter, options.captureContent ?? true),
     },
     configSelector: () => 'test',
     sensitiveDataFilter: options.sensitiveDataFilter ?? false,
@@ -391,7 +401,7 @@ describe('agent trace attributes', () => {
     );
     expect(langfuseExporterOptions.at(-1)?.release).toBe('v2.26.0-dg-abc12345');
 
-    vi.unstubAllEnvs();
+    vi.stubEnv('NEXT_PUBLIC_VERSION', '');
     expect(resolveAgentVersion()).toBeUndefined();
   });
 
@@ -441,8 +451,6 @@ describe('agent trace attributes', () => {
   });
 
   it('[TC-2-15-1] does not create observations when tracing is disabled', () => {
-    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
-    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
     const service = new AgentObservabilityService();
     const registry = service.createRegistry(
       buildDefaults({ enabled: false, captureContent: true })
@@ -457,7 +465,5 @@ describe('agent trace attributes', () => {
     });
 
     expect(span.isValid).toBe(false);
-
-    vi.unstubAllEnvs();
   });
 });

@@ -24,12 +24,16 @@ import { MastraService } from '@gitroom/nestjs-libraries/chat/mastra.service';
 import { Request, Response } from 'express';
 import { RequestContext } from '@mastra/core/di';
 import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
+import {
+  AuthorizationActions,
+  Sections,
+} from '@gitroom/backend/services/auth/permissions/permission.exception.class';
 import { AgentRuntimeService } from '@gitroom/nestjs-libraries/chat/agent.runtime';
 import {
   applyTraceIdentity,
   assertThreadAccess,
-  readRunThreadId,
+  loadThreadMemory,
+  readRequestThreadId,
 } from '@gitroom/nestjs-libraries/chat/agent.trace';
 
 export type ChannelsContext = {
@@ -86,10 +90,16 @@ export class CopilotController {
     @GetUserFromRequest() user: User
   ) {
     const mastra = await this._mastraService.mastra();
-    const threadId = readRunThreadId(req?.body?.method, req?.body?.body);
+    const threadId = readRequestThreadId(
+      req?.body?.method,
+      req?.body?.body,
+      req?.body?.params
+    );
 
     if (threadId) {
-      const memory = await mastra.getAgent('postiz').getMemory();
+      const memory = await loadThreadMemory(() =>
+        mastra.getAgent('postiz').getMemory()
+      );
       await assertThreadAccess(memory, organization.id, threadId);
     }
 

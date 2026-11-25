@@ -38,6 +38,8 @@ const hideContentProcessor: SpanOutputProcessor = {
     if (attributes) {
       delete attributes.instructions;
       delete attributes.availableTools;
+      delete attributes.prompt;
+      delete attributes.tools;
     }
     return span;
   },
@@ -58,12 +60,15 @@ export const inferenceInputProcessor: SpanOutputProcessor = {
 };
 
 export const withTenantTags = (span: AnyExportedSpan): AnyExportedSpan => {
-  const organizationId = span.metadata?.organizationId;
+  const organizationId =
+    span.metadata?.organizationId ?? span.metadata?.resourceId;
   if (span.isRootSpan && typeof organizationId === 'string' && organizationId) {
     span.tags = [
-      ...(span.tags ?? []),
-      TRACE_TAG,
-      `${ORGANIZATION_TAG_PREFIX}${organizationId}`,
+      ...new Set([
+        ...(span.tags ?? []),
+        TRACE_TAG,
+        `${ORGANIZATION_TAG_PREFIX}${organizationId}`,
+      ]),
     ];
   }
 
