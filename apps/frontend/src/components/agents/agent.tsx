@@ -307,17 +307,22 @@ export const Agent: FC<{ children: ReactNode }> = ({ children }) => {
   );
 };
 
+type Thread = { id: string; title?: string | null };
+
 const Threads: FC = () => {
   const fetch = useFetch();
   const router = useRouter();
   const pathname = usePathname();
   const t = useT();
-  const threads = useCallback(async () => {
+  const threads = useCallback(async (): Promise<{ threads: Thread[] }> => {
     return (await fetch('/copilot/list')).json();
   }, [fetch]);
   const { id } = useParams<{ id: string }>();
 
-  const { data } = useSWR('threads', threads);
+  const { data } = useSWR('threads', threads, {
+    refreshInterval: (latest) =>
+      latest?.threads?.some((p) => !p.title?.trim()) ? 5000 : 0,
+  });
 
   return (
     <div
@@ -354,18 +359,22 @@ const Threads: FC = () => {
           </Link>
         </div>
         <div className="flex flex-col gap-[1px] mobile:flex-row mobile:gap-[4px]">
-          {data?.threads?.map((p: { id: string; title: string }) => (
-            <Link
-              className={clsx(
-                'overflow-ellipsis overflow-hidden whitespace-nowrap hover:bg-newBgColor px-[10px] py-[6px] rounded-[10px] cursor-pointer mobile:shrink-0 mobile:max-w-[180px] mobile:border mobile:border-newTableBorder',
-                p.id === id && 'bg-newBgColor'
-              )}
-              href={`/agents/${p.id}`}
-              key={p.id}
-            >
-              {p.title}
-            </Link>
-          ))}
+          {data?.threads?.map((p) => {
+            const title = p.title?.trim() || t('loading', 'Loading');
+            return (
+              <Link
+                className={clsx(
+                  'overflow-ellipsis overflow-hidden whitespace-nowrap hover:bg-newBgColor px-[10px] py-[6px] rounded-[10px] cursor-pointer mobile:shrink-0 mobile:max-w-[180px] mobile:border mobile:border-newTableBorder',
+                  p.id === id && 'bg-newBgColor'
+                )}
+                href={`/agents/${p.id}`}
+                key={p.id}
+                title={title}
+              >
+                {title}
+              </Link>
+            );
+          })}
         </div>
       </div>
     </div>

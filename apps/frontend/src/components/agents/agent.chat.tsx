@@ -20,7 +20,7 @@ import { useModals } from '@gitroom/frontend/components/layout/new-modal';
 import {
   CopilotKit,
   useCopilotAction,
-  useCopilotMessagesContext,
+  useCopilotChatInternal,
 } from '@copilotkit/react-core';
 import {
   MediaPortal,
@@ -29,11 +29,7 @@ import {
 import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { useParams } from 'next/navigation';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import {
-  Message as CopilotMessage,
-  MessageRole,
-  TextMessage,
-} from '@copilotkit/runtime-client-gql';
+import { mutate } from 'swr';
 import { AddEditModal } from '@gitroom/frontend/components/new-launch/add.edit.modal';
 import dayjs from 'dayjs';
 import { fromUtc } from '@gitroom/frontend/components/layout/set.timezone';
@@ -115,13 +111,26 @@ You can also use me as an MCP Server, check Settings >> Agents / Dev
   );
 };
 
+type AgentMessage = NonNullable<
+  ReturnType<typeof useCopilotChatInternal>['agent']
+>['messages'][number];
+
 const LoadMessages: FC<{ id: string }> = ({ id }) => {
-  const { messages, setMessages } = useCopilotMessagesContext();
+  const { agent, messages, setMessages, isAvailable } =
+    useCopilotChatInternal();
   const fetch = useFetch();
   const currentId = useRef<string | null>(null);
-  const loaded = useRef<{ id: string; messages: CopilotMessage[] } | null>(
-    null
-  );
+  const agentRef = useRef(agent);
+  const setMessagesRef = useRef(setMessages);
+  const loaded = useRef<{ id: string; messages: AgentMessage[] } | null>(null);
+
+  useEffect(() => {
+    agentRef.current = agent;
+  }, [agent]);
+
+  useEffect(() => {
+    setMessagesRef.current = setMessages;
+  }, [setMessages]);
 
   const loadMessages = useCallback(
     async (idToSet: string) => {
@@ -133,42 +142,48 @@ const LoadMessages: FC<{ id: string }> = ({ id }) => {
         };
         role: 'user' | 'assistant' | 'system';
       }
-      const toRole = (role: 'user' | 'assistant' | 'system'): MessageRole => {
-        if (role === 'assistant') return MessageRole.Assistant;
-        if (role === 'system') return MessageRole.System;
-        return MessageRole.User;
-      };
-      const list = ((data.messages as RawMessageItem[]) || []).map((p) => {
-        return new TextMessage({
-          content:
-            p.content.content ||
-            (p.content.parts || [])
-              .map((part) => (part.type === 'text' ? part.text || '' : ''))
-              .join(''),
-          role: toRole(p.role),
-        });
-      });
+      const list: AgentMessage[] = (
+        (data.messages as RawMessageItem[]) || []
+      ).map((p) => ({
+        id: makeId(12),
+        content:
+          p.content.content ||
+          (p.content.parts || [])
+            .map((part) => (part.type === 'text' ? part.text || '' : ''))
+            .join(''),
+        role: p.role,
+      }));
 
       if (currentId.current !== idToSet) {
         return;
       }
 
+      const target = agentRef.current;
+      if (!target) {
+        return;
+      }
+
+      target.threadId = idToSet;
       loaded.current = { id: idToSet, messages: list };
-      setMessages(list);
+      setMessagesRef.current(list);
     },
-    [fetch, setMessages]
+    [fetch]
   );
 
   useEffect(() => {
+    if (!isAvailable || loaded.current?.id === id) {
+      return;
+    }
+
     currentId.current = id;
     if (id === 'new') {
       loaded.current = { id, messages: [] };
-      setMessages([]);
+      agentRef.current?.setMessages([]);
       return;
     }
     loaded.current = null;
     loadMessages(id);
-  }, [id, loadMessages, setMessages]);
+  }, [id, isAvailable, loadMessages]);
 
   // CopilotKit resolves loadAgentState to an empty list for Mastra local agents
   // and can clobber the messages we hold, depending on which request resolves last
@@ -177,15 +192,16 @@ const LoadMessages: FC<{ id: string }> = ({ id }) => {
       return;
     }
 
-    if (messages.length) {
-      loaded.current.messages = messages;
+    const current = agent?.messages ?? [];
+    if (current.length) {
+      loaded.current.messages = current;
       return;
     }
 
     if (loaded.current.messages.length) {
-      setMessages(loaded.current.messages);
+      setMessagesRef.current(loaded.current.messages);
     }
-  }, [messages, id, setMessages]);
+  }, [agent, messages, id]);
 
   return null;
 };
@@ -357,6 +373,7 @@ Use the following social media platforms: ${JSON.stringify(
     : ``
 }`
           );
+          void send.then(() => mutate('threads')).catch(() => undefined);
           setValue('');
           mediaRef.current = [];
           setMedia([]);

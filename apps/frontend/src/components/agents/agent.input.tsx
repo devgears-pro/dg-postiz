@@ -2,7 +2,6 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   useCopilotChatInternal,
   useCopilotContext,
-  useCopilotReadable,
 } from '@copilotkit/react-core';
 import AutoResizingTextarea from '@gitroom/frontend/components/agents/agent.textarea';
 import { useChatContext, InputProps } from '@copilotkit/react-ui';
@@ -25,6 +24,7 @@ export const Input = ({
 }) => {
   const context = useChatContext();
   const copilotContext = useCopilotContext();
+  const { interrupt, isAvailable: isReady } = useCopilotChatInternal();
   const showPoweredBy = !copilotContext.copilotApiConfig?.publicApiKey;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -45,7 +45,7 @@ export const Input = ({
 
   const [text, setText] = useState('');
   const send = () => {
-    if (inProgress) return;
+    if (inProgress || !isReady) return;
     onSend(text);
     setText('');
 
@@ -53,23 +53,24 @@ export const Input = ({
   };
 
   const isInProgress = inProgress;
-  const buttonIcon =
-    isInProgress && !hideStopButton
+  const buttonIcon = !isReady
+    ? context.icons.spinnerIcon
+    : isInProgress && !hideStopButton
       ? context.icons.stopIcon
       : context.icons.sendIcon;
 
-  const { interrupt } = useCopilotChatInternal();
   const canSend = useMemo(() => {
     return (
+      isReady &&
       !isInProgress &&
       (text.trim().length > 0 || hasAttachments) &&
       !interrupt
     );
-  }, [interrupt, isInProgress, text, hasAttachments]);
+  }, [interrupt, isInProgress, isReady, text, hasAttachments]);
 
   const canStop = useMemo(() => {
-    return isInProgress && !hideStopButton;
-  }, [isInProgress, hideStopButton]);
+    return isReady && isInProgress && !hideStopButton;
+  }, [isReady, isInProgress, hideStopButton]);
 
   const sendDisabled = !canSend && !canStop;
 
