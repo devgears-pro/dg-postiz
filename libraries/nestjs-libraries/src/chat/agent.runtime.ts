@@ -13,7 +13,10 @@ import {
   AgentConnectionsService,
   type AgentModel,
 } from '@gitroom/nestjs-libraries/chat/agent.connections';
-import { AgentObservabilityService, resolveAgentVersion } from '@gitroom/nestjs-libraries/chat/agent.observability';
+import {
+  AgentObservabilityService,
+  resolveAgentVersion,
+} from '@gitroom/nestjs-libraries/chat/agent.observability';
 import { LoadToolsService } from '@gitroom/nestjs-libraries/chat/load.tools.service';
 import type { AgentRequestContext } from '@gitroom/nestjs-libraries/chat/agent.runtime.token';
 

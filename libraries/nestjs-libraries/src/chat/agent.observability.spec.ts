@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RequestContext } from '@mastra/core/di';
 import { SpanType } from '@mastra/core/observability';
 import type { ObservabilityInstance } from '@mastra/core/observability';
@@ -13,6 +13,26 @@ import {
   withTenantTags,
 } from './agent.observability';
 import { loadAgentDefaults } from './agent.defaults';
+
+const langfuseExporterOptions = vi.hoisted(
+  () => [] as Array<Record<string, unknown>>
+);
+
+vi.mock('@mastra/langfuse', () => ({
+  LangfuseExporter: class {
+    constructor(options: Record<string, unknown>) {
+      langfuseExporterOptions.push(options);
+    }
+
+    exportTracingEvent = async (): Promise<void> => undefined;
+    flush = async (): Promise<void> => undefined;
+    shutdown = async (): Promise<void> => undefined;
+  },
+}));
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const buildDefaults = (options: {
   enabled: boolean;
@@ -74,8 +94,13 @@ describe('AgentObservabilityService', () => {
   it('[TC-2-6-1] transfers prompt, input, tool calls, and response when content capture is enabled', async () => {
     const exporter = new TestExporter();
     const { registry, instance } = buildCapture(exporter);
-    const messages = [{ role: 'user', content: 'How do I schedule a post?' }];
-    const answer = { text: 'Open the calendar and pick a date.', toolCalls: [] };
+    const messages = {
+      messages: [{ role: 'user', content: 'How do I schedule a post?' }],
+    };
+    const answer: { text: string; toolCalls: string[] } = {
+      text: 'Open the calendar and pick a date.',
+      toolCalls: [],
+    };
 
     const span = instance.startSpan({
       name: 'agent run',
@@ -100,6 +125,47 @@ describe('AgentObservabilityService', () => {
     expect(exported.input).toEqual(messages);
     expect(exported.output).toEqual(answer);
     expect(loadedDefaults.langfuse.captureContent).toBe(true);
+  });
+
+  it('[TC-2-6-2] hides request and response content when capture is disabled', async () => {
+    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
+    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
+    const service = new AgentObservabilityService();
+    const registry = service.createRegistry(
+      buildDefaults({ enabled: true, captureContent: false })
+    );
+    const system = registry.getInstance('system');
+    if (!system) throw new Error('The system instance is missing');
+    const exporter = new TestExporter();
+    const probe = new Observability({
+      configs: {
+        probe: {
+          serviceName: 'probe',
+          exporters: [exporter],
+          requestContextKeys: REQUEST_CONTEXT_KEYS,
+          spanOutputProcessors: [...system.getSpanOutputProcessors()],
+        },
+      },
+      configSelector: () => 'probe',
+    });
+    const instance = probe.getInstance('probe');
+    if (!instance) throw new Error('The probe instance is missing');
+
+    const span = instance.startSpan({
+      name: 'agent run',
+      type: SpanType.AGENT_RUN,
+      input: { messages: [{ role: 'user', content: 'secret request' }] },
+      attributes: { instructions: 'secret system prompt' },
+      requestContext: buildRequestContext(),
+    });
+    span.update({ output: { text: 'secret answer' } });
+    span.end();
+    await probe.flush();
+
+    const [exported] = exporter.getSpansByType(SpanType.AGENT_RUN);
+    expect(exported.input).toBeUndefined();
+    expect(exported.output).toBeUndefined();
+    expect(exported.attributes?.instructions).toBeUndefined();
   });
 
   it('[TC-2-8-1] records error status and failure details in trace spans', async () => {
@@ -145,6 +211,8 @@ describe('AgentObservabilityService', () => {
       exportTracingEvent: async (): Promise<void> => {
         throw new Error('Langfuse is unreachable');
       },
+      flush: async (): Promise<void> => undefined,
+      shutdown: async (): Promise<void> => undefined,
     };
     const registry = new Observability({
       configs: {
@@ -157,7 +225,8 @@ describe('AgentObservabilityService', () => {
       configSelector: () => 'test',
     });
     const instance = registry.getInstance('test');
-    if (!instance) throw new Error('The test observability instance is missing');
+    if (!instance)
+      throw new Error('The test observability instance is missing');
 
     const span = instance.startSpan({
       name: 'agent run',
@@ -228,22 +297,20 @@ describe('agent trace attributes', () => {
     await registry.flush();
 
     const [exported] = exporter.getSpansByType(SpanType.AGENT_RUN);
-    const resourceOnly = withTenantTags({
-      isRootSpan: true,
-      metadata: { resourceId: 'org-test-123' },
-      tags: [] as string[],
-    });
     expect(exported.metadata.organizationId).toBe('org-test-123');
     expect(exported.metadata.threadId).toBe('thread-test-1');
     expect(withTenantTags(exported).tags).toEqual([
       'postiz',
       'org:org-test-123',
     ]);
-    expect(resourceOnly.metadata.organizationId).toBe('org-test-123');
 
+    langfuseExporterOptions.length = 0;
     const service = new AgentObservabilityService();
     service.createRegistry(
       buildDefaults({ enabled: true, captureContent: true })
+    );
+    expect(langfuseExporterOptions.at(-1)?.customSpanFormatter).toBe(
+      withTenantTags
     );
     expect(
       service.prepare(buildBundle({ enabled: true, captureContent: true }))
@@ -251,8 +318,6 @@ describe('agent trace attributes', () => {
     expect(
       service.prepare(buildBundle({ enabled: false, captureContent: true }))
     ).toBe('disabled');
-
-    vi.unstubAllEnvs();
   });
 
   it('[TC-2-10-1] associates the authenticated user with telemetry traces', async () => {
@@ -301,6 +366,8 @@ describe('agent trace attributes', () => {
 
   it('[TC-2-13-1] records the build version in release and version', async () => {
     vi.stubEnv('NEXT_PUBLIC_VERSION', 'v2.26.0-dg-abc12345');
+    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
+    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
     const exporter = new TestExporter();
     const { registry, instance } = buildCapture(exporter);
     const requestContext = buildRequestContext();
@@ -317,15 +384,41 @@ describe('agent trace attributes', () => {
     expect(resolveAgentVersion()).toBe('v2.26.0-dg-abc12345');
     expect(exported.metadata.version).toBe('v2.26.0-dg-abc12345');
 
+    langfuseExporterOptions.length = 0;
+    const service = new AgentObservabilityService();
+    service.createRegistry(
+      buildDefaults({ enabled: true, captureContent: true })
+    );
+    expect(langfuseExporterOptions.at(-1)?.release).toBe('v2.26.0-dg-abc12345');
+
     vi.unstubAllEnvs();
     expect(resolveAgentVersion()).toBeUndefined();
   });
 
   it('[TC-2-14-1] drops streaming chunks from exported observations', async () => {
+    vi.stubEnv('LANGFUSE_PUBLIC_KEY', 'pk-lf-test');
+    vi.stubEnv('LANGFUSE_SECRET_KEY', 'sk-lf-test');
+    const service = new AgentObservabilityService();
+    const serviceRegistry = service.createRegistry(
+      buildDefaults({ enabled: true, captureContent: true })
+    );
+    const system = serviceRegistry.getInstance('system');
+    if (!system) throw new Error('The system instance is missing');
+    const config = system.getConfig();
     const exporter = new TestExporter();
-    const { registry, instance } = buildCapture(exporter, {
-      excludeSpanTypes: [SpanType.MODEL_CHUNK],
+    const probe = new Observability({
+      configs: {
+        probe: {
+          serviceName: 'probe',
+          exporters: [exporter],
+          requestContextKeys: REQUEST_CONTEXT_KEYS,
+          excludeSpanTypes: config.excludeSpanTypes,
+        },
+      },
+      configSelector: () => 'probe',
     });
+    const instance = probe.getInstance('probe');
+    if (!instance) throw new Error('The probe instance is missing');
     const requestContext = buildRequestContext();
 
     const root = instance.startSpan({
@@ -340,8 +433,9 @@ describe('agent trace attributes', () => {
     });
     chunk.end();
     root.end();
-    await registry.flush();
+    await probe.flush();
 
+    expect(config.excludeSpanTypes).toEqual([SpanType.MODEL_CHUNK]);
     expect(exporter.getSpansByType(SpanType.MODEL_CHUNK)).toHaveLength(0);
     expect(exporter.getSpansByType(SpanType.AGENT_RUN)).toHaveLength(1);
   });

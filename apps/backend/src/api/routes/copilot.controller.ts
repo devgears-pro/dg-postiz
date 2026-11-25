@@ -16,7 +16,8 @@ import {
   copilotRuntimeNodeHttpEndpoint,
 } from '@copilotkit/runtime';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { Organization } from '@prisma/client';
+import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { Organization, User } from '@prisma/client';
 import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { MastraAgent } from '@ag-ui/mastra';
 import { MastraService } from '@gitroom/nestjs-libraries/chat/mastra.service';
@@ -26,8 +27,9 @@ import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permis
 import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
 import { AgentRuntimeService } from '@gitroom/nestjs-libraries/chat/agent.runtime';
 import {
+  applyTraceIdentity,
   assertThreadAccess,
-  buildSessionId,
+  readRunThreadId,
 } from '@gitroom/nestjs-libraries/chat/agent.trace';
 
 export type ChannelsContext = {
@@ -80,10 +82,11 @@ export class CopilotController {
   async agent(
     @Req() req: Request,
     @Res() res: Response,
-    @GetOrgFromRequest() organization: Organization
+    @GetOrgFromRequest() organization: Organization,
+    @GetUserFromRequest() user: User
   ) {
     const mastra = await this._mastraService.mastra();
-    const threadId = req?.body?.threadId || req?.body?.body?.threadId;
+    const threadId = readRunThreadId(req?.body?.method, req?.body?.body);
 
     if (threadId) {
       const memory = await mastra.getAgent('postiz').getMemory();
@@ -118,17 +121,11 @@ export class CopilotController {
 
     requestContext.set('organization', JSON.stringify(organization));
     requestContext.set('ui', 'true');
-    if (threadId) {
-      requestContext.setRaw('threadId', threadId);
-      requestContext.setRaw(
-        'sessionId',
-        buildSessionId(organization.id, threadId)
-      );
-    }
-
-    const userId = (req as Request & { user?: { id?: string } }).user?.id;
-    if (userId) requestContext.setRaw('userId', userId);
-
+    applyTraceIdentity(requestContext, {
+      organizationId: organization.id,
+      userId: user?.id,
+      threadId,
+    });
     prepared.applyTo(requestContext);
 
     const agents = MastraAgent.getLocalAgents({

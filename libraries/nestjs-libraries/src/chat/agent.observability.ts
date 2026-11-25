@@ -3,7 +3,12 @@ import { Observability } from '@mastra/observability';
 import type { ObservabilityInstanceConfig } from '@mastra/observability';
 import { LangfuseExporter } from '@mastra/langfuse';
 import { SamplingStrategyType, SpanType } from '@mastra/core/observability';
-import type { AnySpan, SpanOutputProcessor } from '@mastra/core/observability';
+import type {
+  AnyExportedSpan,
+  AnySpan,
+  ObservabilityExporter,
+  SpanOutputProcessor,
+} from '@mastra/core/observability';
 import type { SystemAgentDefaults } from '@gitroom/helpers/agent/agent.config.schema';
 import type { ResolvedAgentBundle } from '@gitroom/nestjs-libraries/chat/agent.config.service';
 
@@ -29,6 +34,11 @@ const hideContentProcessor: SpanOutputProcessor = {
     if (!span) return span;
     span.input = undefined;
     span.output = undefined;
+    const attributes = span.attributes as Record<string, unknown> | undefined;
+    if (attributes) {
+      delete attributes.instructions;
+      delete attributes.availableTools;
+    }
     return span;
   },
   shutdown: async () => undefined,
@@ -47,32 +57,13 @@ export const inferenceInputProcessor: SpanOutputProcessor = {
   shutdown: async () => undefined,
 };
 
-type TenantSpan = {
-  isRootSpan?: boolean;
-  metadata?: Record<string, unknown>;
-  tags?: string[];
-};
-
-export const withTenantTags = <T extends TenantSpan>(span: T): T => {
-  const metadata = span.metadata;
-  if (!metadata) return span;
-
-  const organizationId = metadata.organizationId ?? metadata.resourceId;
-  if (
-    metadata.organizationId === undefined &&
-    typeof organizationId === 'string'
-  ) {
-    metadata.organizationId = organizationId;
-  }
-
-  if (
-    span.isRootSpan &&
-    typeof metadata.organizationId === 'string' &&
-    metadata.organizationId
-  ) {
+export const withTenantTags = (span: AnyExportedSpan): AnyExportedSpan => {
+  const organizationId = span.metadata?.organizationId;
+  if (span.isRootSpan && typeof organizationId === 'string' && organizationId) {
     span.tags = [
+      ...(span.tags ?? []),
       TRACE_TAG,
-      `${ORGANIZATION_TAG_PREFIX}${metadata.organizationId}`,
+      `${ORGANIZATION_TAG_PREFIX}${organizationId}`,
     ];
   }
 
@@ -86,6 +77,20 @@ const noopExporter = {
   shutdown: async (): Promise<void> => undefined,
 };
 
+export const buildTraceConfig = (
+  exporter: ObservabilityExporter,
+  captureContent: boolean
+): Omit<ObservabilityInstanceConfig, 'name'> => ({
+  serviceName: SERVICE_NAME,
+  exporters: [exporter],
+  requestContextKeys: REQUEST_CONTEXT_KEYS,
+  excludeSpanTypes: [SpanType.MODEL_CHUNK],
+  spanOutputProcessors: [
+    inferenceInputProcessor,
+    ...(captureContent ? [] : [hideContentProcessor]),
+  ],
+});
+
 @Injectable()
 export class AgentObservabilityService implements OnApplicationShutdown {
   private _logger = new Logger(AgentObservabilityService.name);
@@ -94,10 +99,7 @@ export class AgentObservabilityService implements OnApplicationShutdown {
   createRegistry(defaults: SystemAgentDefaults): Observability {
     if (this._registry) return this._registry;
 
-    const configs: Record<
-      string,
-      Omit<ObservabilityInstanceConfig, 'name'>
-    > = {
+    const configs: Record<string, Omit<ObservabilityInstanceConfig, 'name'>> = {
       disabled: {
         serviceName: SERVICE_NAME,
         sampling: { type: SamplingStrategyType.NEVER },
@@ -115,27 +117,17 @@ export class AgentObservabilityService implements OnApplicationShutdown {
         : undefined;
 
       if (publicKey && secretKey) {
-        configs.system = {
-          serviceName: SERVICE_NAME,
-          exporters: [
-            new LangfuseExporter({
-              publicKey,
-              secretKey,
-              baseUrl: defaults.langfuse.baseUrl,
-              release: resolveAgentVersion(),
-              environment: process.env.NODE_ENV,
-              customSpanFormatter: withTenantTags,
-            }),
-          ],
-          requestContextKeys: REQUEST_CONTEXT_KEYS,
-          excludeSpanTypes: [SpanType.MODEL_CHUNK],
-          spanOutputProcessors: [
-            inferenceInputProcessor,
-            ...(defaults.langfuse.captureContent
-              ? []
-              : [hideContentProcessor]),
-          ],
-        };
+        configs.system = buildTraceConfig(
+          new LangfuseExporter({
+            publicKey,
+            secretKey,
+            baseUrl: defaults.langfuse.baseUrl,
+            release: resolveAgentVersion(),
+            environment: process.env.NODE_ENV,
+            customSpanFormatter: withTenantTags,
+          }),
+          defaults.langfuse.captureContent
+        );
       }
     }
 
