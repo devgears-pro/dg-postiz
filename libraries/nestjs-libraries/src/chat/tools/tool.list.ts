@@ -28,11 +28,15 @@ import { UploadWidgetStatusTool } from '@gitroom/nestjs-libraries/chat/tools/upl
 import { SkillSaveTool } from '@gitroom/nestjs-libraries/chat/tools/skill.save.tool';
 import { SkillRemoveTool } from '@gitroom/nestjs-libraries/chat/tools/skill.remove.tool';
 import { SkillsListTool } from '@gitroom/nestjs-libraries/chat/tools/skills.list.tool';
+import { DocsListTool } from '@gitroom/nestjs-libraries/chat/tools/docs.list.tool';
+import { DocsReadTool } from '@gitroom/nestjs-libraries/chat/tools/docs.read.tool';
 
 export const toolList = [
   SkillSaveTool,
   SkillRemoveTool,
   SkillsListTool,
+  DocsListTool,
+  DocsReadTool,
   IntegrationListTool,
   GroupListTool,
   IntegrationConnectTool,

@@ -102,6 +102,34 @@ export const useMenuItem = () => {
       ),
       path: '/media',
     },
+    {
+      name: t('docs', 'Docs'),
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="21"
+          viewBox="0 0 20 21"
+          fill="none"
+        >
+          <path
+            d="M11.6667 2.16699H5.00008C4.55805 2.16699 4.13413 2.34259 3.82157 2.65515C3.50901 2.96771 3.33341 3.39163 3.33341 3.83366V17.167C3.33341 17.609 3.50901 18.0329 3.82157 18.3455C4.13413 18.6581 4.55805 18.8337 5.00008 18.8337H15.0001C15.4421 18.8337 15.866 18.6581 16.1786 18.3455C16.4912 18.0329 16.6667 17.609 16.6667 17.167V7.16699L11.6667 2.16699Z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M11.6667 2.16699V7.16699H16.6667M13.3334 11.3337H6.66675M13.3334 14.667H6.66675M8.33341 8.00033H6.66675"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ),
+      path: '/docs',
+    },
   ] satisfies MenuItemInterface[] as MenuItemInterface[];
 
   const secondMenu = [
