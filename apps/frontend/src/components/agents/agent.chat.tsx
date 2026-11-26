@@ -41,6 +41,7 @@ import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
 import type { SelectedDoc } from '@gitroom/frontend/components/docs/docs.picker.modal';
+import { formatUserMessageContent } from './agent.message.format';
 
 export const AgentChat: FC = () => {
   const { backendUrl } = useVariables();
@@ -137,7 +138,7 @@ const LoadMessages: FC<{
   id: string;
   onLoadingChange: (loading: boolean) => void;
 }> = ({ id, onLoadingChange }) => {
-  const { agent, messages, setMessages, isAvailable } =
+  const { agent, messages, setMessages, isAvailable, isLoading } =
     useCopilotChatInternal();
   const fetch = useFetch();
   const currentId = useRef<string | null>(null);
@@ -258,6 +259,21 @@ const LoadMessages: FC<{
   }, [id, onLoadingChange]);
 
   useEffect(() => {
+    if (id === 'new' || isLoading) return;
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        void loadMessages(id).catch(() => undefined);
+      }
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [id, loadMessages, isLoading]);
+
+  useEffect(() => {
     const reset = () => {
       if (agentRef.current) {
         agentRef.current.threadId = makeId(21);
@@ -295,48 +311,14 @@ const LoadMessages: FC<{
 };
 
 const Message: FC<UserMessageProps> = (props) => {
-  const convertContentToImagesAndVideo = useMemo(() => {
-    const content = props.message?.content || '';
-    const text =
-      typeof content === 'string'
-        ? content
-        : content.map((p) => (p.type === 'text' ? p.text : '')).join('');
-
-    return text
-      .replace(/Video: (http.*mp4\n)/g, (match, p1) => {
-        return `<video controls class="h-[150px] w-[150px] rounded-[8px] mb-[10px]"><source src="${p1.trim()}" type="video/mp4">Your browser does not support the video tag.</video>`;
-      })
-      .replace(/Image: (http\S+) \(media [^)]+\)/g, (match, p1) => {
-        return `<img src="${p1.trim()}" class="h-[150px] w-[150px] max-w-full border border-newBgColorInner" />`;
-      })
-      .replace(/Image: (http.*\n)/g, (match, p1) => {
-        return `<img src="${p1.trim()}" class="h-[150px] w-[150px] max-w-full border border-newBgColorInner" />`;
-      })
-      .replace(/\[\-\-Media\-\-\](.*)\[\-\-Media\-\-\]/g, (match, p1) => {
-        return `<div class="flex justify-center mt-[20px]">${p1}</div>`;
-      })
-      .replace(/\[\-\-Docs\-\-\]([\s\S]*?)\[\-\-Docs\-\-\]/g, (_match, p1) => {
-        const escaped = String(p1)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-        return `<div class="mt-[8px] text-[12px] opacity-80">${escaped}</div>`;
-      })
-      .replace(
-        /(\[--integrations--\][\s\S]*?\[--integrations--\])/g,
-        (match, p1) => {
-          return ``;
-        }
-      )
-      .replace(/\[--Media--\]/g, '')
-      .replace(/\[--Docs--\]/g, '');
-  }, [props.message?.content]);
+  const content = useMemo(
+    () => formatUserMessageContent(props.message?.content),
+    [props.message?.content]
+  );
   return (
     <div
       className="copilotKitMessage copilotKitUserMessage min-w-[300px]"
-      dangerouslySetInnerHTML={{ __html: convertContentToImagesAndVideo }}
+      dangerouslySetInnerHTML={{ __html: content }}
     />
   );
 };

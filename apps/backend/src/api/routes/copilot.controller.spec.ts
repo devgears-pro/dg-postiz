@@ -231,10 +231,13 @@ describe('CopilotController conversation management', () => {
     expect(memory.deleteThread).not.toHaveBeenCalled();
   });
 
-  it('returns the full conversation history', async () => {
+  it('returns the full conversation history in chronological order', async () => {
     const { controller, memory } = buildController('org-1');
     memory.recall.mockResolvedValueOnce({
-      messages: [{ id: 'message-1' }, { id: 'message-2' }],
+      messages: [
+        { id: 'message-2', createdAt: new Date('2026-01-01T00:00:02Z') },
+        { id: 'message-1', createdAt: new Date('2026-01-01T00:00:01Z') },
+      ],
       total: 2,
       page: 0,
       perPage: 200,
@@ -253,7 +256,10 @@ describe('CopilotController conversation management', () => {
     );
     expect(result).toEqual(
       expect.objectContaining({
-        messages: [{ id: 'message-2' }, { id: 'message-1' }],
+        messages: [
+          expect.objectContaining({ id: 'message-1' }),
+          expect.objectContaining({ id: 'message-2' }),
+        ],
       })
     );
   });

@@ -52,14 +52,25 @@ export const BUILTIN_SYSTEM_PROMPT = `You are an agent that helps manage and sch
 const uiConfirmationHint =
   '- If the user confirm, ask if they would like to get a modal with populated content without scheduling the post yet or if they want to schedule it right away.';
 
+const telegramClientHint =
+  '- The user is messaging via Telegram on a mobile screen. Keep replies concise, plain, and easy to scan. Do not offer web modals or paste internal image URLs; generated images are sent directly as photos.';
+
 export function renderAgentInstructions(options: {
   prompt: string;
   date: string;
   ui: boolean;
+  client?: string;
 }): string {
+  const hints = [
+    options.ui ? uiConfirmationHint : '',
+    options.client === 'telegram' ? telegramClientHint : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   return `Global information:
   - Date (UTC): ${options.date}
 
 ${options.prompt}
-${options.ui ? uiConfirmationHint : ''}`;
+${hints}`;
 }

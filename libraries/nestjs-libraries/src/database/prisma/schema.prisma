@@ -46,6 +46,7 @@ model Organization {
   oauthApp            OAuthApp[]
   oauthAuthorizations OAuthAuthorization[]
   agentConfig         OrganizationAgentConfig?
+  communicationLinks  CommunicationChannelLink[]
 
   @@index([apiKey])
   @@index([streakSince])
@@ -132,6 +133,7 @@ model User {
   sendFailureEmails     Boolean              @default(true)
   sendStreakEmails      Boolean              @default(true)
   oauthAuthorizations   OAuthAuthorization[]
+  communicationLinks    CommunicationChannelLink[]
 
   @@unique([email, providerName])
   @@index([providerId, providerName])
@@ -1857,4 +1859,24 @@ model Announcement {
   description String
   color       AnnouncementColor @default(INFO)
   createdAt   DateTime          @default(now())
+}
+
+model CommunicationChannelLink {
+  id               String       @id @default(uuid())
+  userId           String
+  organizationId   String
+  channel          String
+  externalUserId   String
+  externalChatId   String
+  externalUsername String?
+  activeThreadId   String?
+  metadata         Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([channel, externalUserId])
+  @@unique([userId, organizationId, channel])
+  @@index([organizationId, channel])
 }

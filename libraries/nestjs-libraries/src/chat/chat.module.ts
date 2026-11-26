@@ -13,6 +13,8 @@ import { AGENT_MESSAGING } from '@gitroom/nestjs-libraries/chat/agent.messaging.
 import { AGENT_RUNTIME } from '@gitroom/nestjs-libraries/chat/agent.runtime.token';
 import { AGENT_DEFAULTS } from '@gitroom/nestjs-libraries/chat/agent.defaults.token';
 import { DocsModule } from '@gitroom/nestjs-libraries/docs/docs.module';
+import { CommunicationChannelsService } from '@gitroom/nestjs-libraries/chat/communication.channels.service';
+import { TelegramAssistantService } from '@gitroom/nestjs-libraries/chat/telegram.assistant.service';
 
 @Global()
 @Module({
@@ -27,6 +29,8 @@ import { DocsModule } from '@gitroom/nestjs-libraries/docs/docs.module';
     AgentObservabilityService,
     LangfusePromptService,
     AgentRuntimeService,
+    CommunicationChannelsService,
+    TelegramAssistantService,
     { provide: AGENT_DEFAULTS, useExisting: AgentDefaultsService },
     { provide: AGENT_RUNTIME, useExisting: AgentRuntimeService },
     { provide: AGENT_MESSAGING, useExisting: MastraService },

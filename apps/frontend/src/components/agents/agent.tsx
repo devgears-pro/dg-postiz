@@ -557,6 +557,14 @@ const Threads: FC = () => {
             );
           })}
         </div>
+        <div className="pt-[12px] mt-[12px] border-t border-fifth">
+          <Link
+            href="/settings?tab=communication-channels"
+            className="text-[13px] opacity-80 hover:opacity-100 underline"
+          >
+            {t('communication_channels', 'Communication Channels')}
+          </Link>
+        </div>
       </div>
     </div>
   );
