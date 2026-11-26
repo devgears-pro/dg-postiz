@@ -7,6 +7,7 @@ import { AgentConfigService } from '@gitroom/nestjs-libraries/chat/agent.config.
 import { AgentDefaultsService } from '@gitroom/nestjs-libraries/chat/agent.defaults.service';
 import { AgentConnectionsService } from '@gitroom/nestjs-libraries/chat/agent.connections';
 import { AgentObservabilityService } from '@gitroom/nestjs-libraries/chat/agent.observability';
+import { LangfusePromptService } from '@gitroom/nestjs-libraries/chat/langfuse.prompt.service';
 import { AgentRuntimeService } from '@gitroom/nestjs-libraries/chat/agent.runtime';
 import { AGENT_MESSAGING } from '@gitroom/nestjs-libraries/chat/agent.messaging.token';
 import { AGENT_RUNTIME } from '@gitroom/nestjs-libraries/chat/agent.runtime.token';
@@ -26,6 +27,7 @@ import { TelegramAssistantService } from '@gitroom/nestjs-libraries/chat/telegra
     AgentDefaultsService,
     AgentConnectionsService,
     AgentObservabilityService,
+    LangfusePromptService,
     AgentRuntimeService,
     CommunicationChannelsService,
     TelegramAssistantService,

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { createSkill } from '@mastra/core/skills';
 import type {
   ResolvedAgentConfig,
@@ -18,6 +18,13 @@ import {
   resolveAgentVersion,
 } from '@gitroom/nestjs-libraries/chat/agent.observability';
 import { LoadToolsService } from '@gitroom/nestjs-libraries/chat/load.tools.service';
+import {
+  DEFAULT_TITLE_INSTRUCTIONS,
+  LangfusePromptService,
+  SYSTEM_PROMPT_NAME,
+  TITLE_PROMPT_NAME,
+  type ResolvedPrompt,
+} from '@gitroom/nestjs-libraries/chat/langfuse.prompt.service';
 import type { AgentRequestContext } from '@gitroom/nestjs-libraries/chat/agent.runtime.token';
 
 export const AGENT_CONTEXT_KEYS = {
@@ -27,6 +34,8 @@ export const AGENT_CONTEXT_KEYS = {
   skills: 'agentSkills',
   model: 'agentModel',
   titleModel: 'agentTitleModel',
+  prompt: 'agentPrompt',
+  titlePrompt: 'agentTitlePrompt',
   observability: 'agentObservabilityKey',
 } as const;
 
@@ -38,6 +47,8 @@ export type AgentRuntimeOptions = {
 export type AgentPrepared = {
   bundle?: ResolvedAgentBundle;
   config: ResolvedAgentConfig;
+  prompt: ResolvedPrompt;
+  titlePrompt: ResolvedPrompt;
   model: AgentModel;
   titleModel: AgentModel;
   tools: Record<string, unknown>;
@@ -62,7 +73,8 @@ export class AgentRuntimeService {
     private _configService: AgentConfigService,
     private _connections: AgentConnectionsService,
     private _loadTools: LoadToolsService,
-    private _observability: AgentObservabilityService
+    private _observability: AgentObservabilityService,
+    @Optional() private _prompts?: LangfusePromptService
   ) {}
 
   async prepare(
@@ -104,6 +116,23 @@ export class AgentRuntimeService {
     }
 
     const observabilityKey = this._observability.prepare(bundle);
+    const [prompt, titlePrompt] = this._prompts
+      ? await Promise.all([
+          this._prompts.getSystemPrompt(),
+          this._prompts.getTitlePrompt(),
+        ])
+      : [
+          {
+            name: SYSTEM_PROMPT_NAME,
+            text: bundle.config.prompt,
+            isFallback: true,
+          },
+          {
+            name: TITLE_PROMPT_NAME,
+            text: DEFAULT_TITLE_INSTRUCTIONS,
+            isFallback: true,
+          },
+        ];
 
     const skills = bundle.config.skills.map(toInlineSkill);
     const tools = { ...builtinTools, ...mcp.tools };
@@ -111,6 +140,8 @@ export class AgentRuntimeService {
     return {
       bundle,
       config: bundle.config,
+      prompt,
+      titlePrompt,
       model,
       titleModel,
       tools,
@@ -124,6 +155,8 @@ export class AgentRuntimeService {
         requestContext.setRaw(AGENT_CONTEXT_KEYS.config, bundle.config);
         requestContext.setRaw(AGENT_CONTEXT_KEYS.model, model);
         requestContext.setRaw(AGENT_CONTEXT_KEYS.titleModel, titleModel);
+        requestContext.setRaw(AGENT_CONTEXT_KEYS.prompt, prompt);
+        requestContext.setRaw(AGENT_CONTEXT_KEYS.titlePrompt, titlePrompt);
         requestContext.setRaw(AGENT_CONTEXT_KEYS.tools, tools);
         requestContext.setRaw(AGENT_CONTEXT_KEYS.skills, skills);
         requestContext.setRaw(
@@ -146,10 +179,27 @@ export class AgentRuntimeService {
     requestContext: AgentRequestContext
   ): Promise<AgentPrepared> {
     if (requestContext.getRaw(AGENT_CONTEXT_KEYS.prepared)) {
+      const config = requestContext.getRaw(
+        AGENT_CONTEXT_KEYS.config
+      ) as ResolvedAgentConfig;
       return {
-        config: requestContext.getRaw(
-          AGENT_CONTEXT_KEYS.config
-        ) as ResolvedAgentConfig,
+        config,
+        prompt:
+          (requestContext.getRaw(
+            AGENT_CONTEXT_KEYS.prompt
+          ) as ResolvedPrompt | undefined) ?? {
+            name: SYSTEM_PROMPT_NAME,
+            text: config.prompt,
+            isFallback: true,
+          },
+        titlePrompt:
+          (requestContext.getRaw(
+            AGENT_CONTEXT_KEYS.titlePrompt
+          ) as ResolvedPrompt | undefined) ?? {
+            name: TITLE_PROMPT_NAME,
+            text: DEFAULT_TITLE_INSTRUCTIONS,
+            isFallback: true,
+          },
         model: requestContext.getRaw(AGENT_CONTEXT_KEYS.model) as AgentModel,
         titleModel: requestContext.getRaw(
           AGENT_CONTEXT_KEYS.titleModel

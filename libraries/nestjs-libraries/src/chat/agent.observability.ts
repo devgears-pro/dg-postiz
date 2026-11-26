@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
-import { Observability, SensitiveDataFilter } from '@mastra/observability';
+import { Observability, SensitiveDataFilter, buildTracingOptions } from '@mastra/observability';
 import type { ObservabilityInstanceConfig } from '@mastra/observability';
-import { LangfuseExporter } from '@mastra/langfuse';
+import { LangfuseExporter, withLangfusePrompt } from '@mastra/langfuse';
 import { SamplingStrategyType, SpanType } from '@mastra/core/observability';
 import type {
   AnyExportedSpan,
@@ -11,6 +11,7 @@ import type {
 } from '@mastra/core/observability';
 import type { SystemAgentDefaults } from '@gitroom/helpers/agent/agent.config.schema';
 import type { ResolvedAgentBundle } from '@gitroom/nestjs-libraries/chat/agent.config.service';
+import type { ResolvedPrompt } from '@gitroom/nestjs-libraries/chat/langfuse.prompt.service';
 
 const SERVICE_NAME = 'postiz-agent';
 const TRACE_TAG = 'postiz';
@@ -174,3 +175,16 @@ export class AgentObservabilityService implements OnApplicationShutdown {
     return this.shutdown();
   }
 }
+
+export const buildPromptTracingOptions = (prompt?: ResolvedPrompt) => {
+  if (!prompt || prompt.isFallback || prompt.version === undefined) {
+    return undefined;
+  }
+
+  return buildTracingOptions(
+    withLangfusePrompt({
+      name: prompt.name,
+      version: prompt.version,
+    })
+  );
+};
