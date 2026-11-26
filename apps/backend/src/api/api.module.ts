@@ -59,6 +59,8 @@ import { FarcasterProvider } from '@gitroom/backend/services/auth/providers/farc
 import { WalletProvider } from '@gitroom/backend/services/auth/providers/wallet.provider';
 import { OauthProvider } from '@gitroom/backend/services/auth/providers/oauth.provider';
 import { StripeController } from '@gitroom/backend/api/routes/stripe.controller';
+import { CommunicationChannelsController } from '@gitroom/backend/api/routes/communication.channels.controller';
+import { TelegramWebhookController } from '@gitroom/backend/api/routes/telegram.webhook.controller';
 
 const authenticatedController = [
   UsersController,
@@ -73,6 +75,7 @@ const authenticatedController = [
   NotificationsController,
   CopilotController,
   AgentConfigController,
+  CommunicationChannelsController,
   WebhookController,
   SignatureController,
   AutopostController,
@@ -105,6 +108,7 @@ const authenticatedController = [
         OAuthController,
         MediaWidgetController,
         ClippingWidgetController,
+        TelegramWebhookController,
         ...authenticatedController,
       ],
   providers: [

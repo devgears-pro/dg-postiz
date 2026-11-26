@@ -258,6 +258,21 @@ const LoadMessages: FC<{
   }, [id, onLoadingChange]);
 
   useEffect(() => {
+    if (id === 'new') return;
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        void loadMessages(id).catch(() => undefined);
+      }
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [id, loadMessages]);
+
+  useEffect(() => {
     const reset = () => {
       if (agentRef.current) {
         agentRef.current.threadId = makeId(21);

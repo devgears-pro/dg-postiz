@@ -84,6 +84,7 @@ export class LoadToolsService {
           prompt: prepared.config.prompt,
           date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
           ui: requestContext.get('ui') === 'true',
+          client: String(requestContext.get('client') || ''),
         });
       },
       model: async ({ requestContext }) => {

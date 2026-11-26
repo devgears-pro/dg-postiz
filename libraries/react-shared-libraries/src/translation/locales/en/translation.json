@@ -1057,5 +1057,22 @@
   "docs_folder_failed": "Could not create folder",
   "docs_rename_failed": "Could not rename item",
   "docs_delete_confirm": "Are you sure you want to delete this item?",
-  "docs_delete_failed": "Could not delete item"
+  "docs_delete_failed": "Could not delete item",
+  "communication_channels": "Communication Channels",
+  "communication_channels_desc": "Chat with your Postiz AI assistant from external messengers.",
+  "telegram_confirm_title": "Confirm Telegram connection",
+  "telegram_confirm_desc": "Click below to link your Telegram account to the active Postiz organization.",
+  "confirm_connection": "Confirm connection",
+  "telegram_connect_failed": "Could not generate Telegram connection link",
+  "telegram_confirm_failed": "Could not confirm Telegram connection",
+  "telegram_connected_toast": "Telegram connected to your workspace",
+  "telegram_disconnected_toast": "Telegram disconnected",
+  "telegram_linked_as": "Linked account: @{{username}}",
+  "telegram_linked": "Telegram account is linked.",
+  "telegram_connect_hint": "Connect Telegram to start or continue AI assistant chats from your phone.",
+  "connect_telegram": "Connect Telegram",
+  "open_in_telegram": "Open in Telegram",
+  "disconnect": "Disconnect",
+  "not_connected": "Not connected",
+  "not_configured": "Not configured"
 }
