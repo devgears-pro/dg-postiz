@@ -7,6 +7,7 @@ import { AgentConfigService } from '@gitroom/nestjs-libraries/chat/agent.config.
 import { AgentDefaultsService } from '@gitroom/nestjs-libraries/chat/agent.defaults.service';
 import { AgentConnectionsService } from '@gitroom/nestjs-libraries/chat/agent.connections';
 import { AgentObservabilityService } from '@gitroom/nestjs-libraries/chat/agent.observability';
+import { LangfusePromptService } from '@gitroom/nestjs-libraries/chat/langfuse.prompt.service';
 import { AgentRuntimeService } from '@gitroom/nestjs-libraries/chat/agent.runtime';
 import { AGENT_MESSAGING } from '@gitroom/nestjs-libraries/chat/agent.messaging.token';
 import { AGENT_RUNTIME } from '@gitroom/nestjs-libraries/chat/agent.runtime.token';
@@ -24,6 +25,7 @@ import { DocsModule } from '@gitroom/nestjs-libraries/docs/docs.module';
     AgentDefaultsService,
     AgentConnectionsService,
     AgentObservabilityService,
+    LangfusePromptService,
     AgentRuntimeService,
     { provide: AGENT_DEFAULTS, useExisting: AgentDefaultsService },
     { provide: AGENT_RUNTIME, useExisting: AgentRuntimeService },
