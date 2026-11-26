@@ -13,9 +13,15 @@ import {
 } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
 import {
   AGENT_RUNTIME,
+  type AgentRequestContext,
   type AgentRuntimeLike,
 } from '@gitroom/nestjs-libraries/chat/agent.runtime.token';
-import { renderAgentInstructions } from '@gitroom/nestjs-libraries/chat/agent.prompt';
+import {
+  DEFAULT_TITLE_INSTRUCTIONS,
+  renderAgentInstructions,
+} from '@gitroom/nestjs-libraries/chat/agent.prompt';
+import { buildPromptTracingOptions } from '@gitroom/nestjs-libraries/chat/agent.observability';
+import type { ResolvedPrompt } from '@gitroom/nestjs-libraries/chat/langfuse.prompt.service';
 import dayjs from 'dayjs';
 
 export const AgentState = object({
@@ -81,7 +87,7 @@ export class LoadToolsService {
       instructions: async ({ requestContext }) => {
         const prepared = await this._runtime().ensurePrepared(requestContext);
         return renderAgentInstructions({
-          prompt: prepared.config.prompt,
+          prompt: prepared.prompt?.text ?? prepared.config.prompt,
           date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
           ui: requestContext.get('ui') === 'true',
         });
@@ -101,8 +107,10 @@ export class LoadToolsService {
       defaultOptions: async ({ requestContext }) => {
         const prepared = await this._runtime().ensurePrepared(requestContext);
         const settings = prepared.config.generation;
+        const tracingOptions = buildPromptTracingOptions(prepared.prompt);
         return {
           ...(settings.maxSteps ? { maxSteps: settings.maxSteps } : {}),
+          ...(tracingOptions ? { tracingOptions } : {}),
           ...(settings.temperature !== undefined ||
           settings.maxOutputTokens !== undefined
             ? {
@@ -129,6 +137,21 @@ export class LoadToolsService {
             }) =>
               requestContext?.get('agentTitleModel') ??
               openai.chat('gpt-5.2')) as never,
+            instructions: async ({
+              requestContext,
+            }: {
+              requestContext?: RequestContext<unknown>;
+            }) => {
+              const titlePrompt = requestContext?.getRaw('agentTitlePrompt') as
+                | ResolvedPrompt
+                | undefined;
+              if (titlePrompt?.text) return titlePrompt.text;
+              if (!requestContext) return DEFAULT_TITLE_INSTRUCTIONS;
+              const prepared = await this._runtime().ensurePrepared(
+                requestContext as unknown as AgentRequestContext
+              );
+              return prepared.titlePrompt?.text ?? DEFAULT_TITLE_INSTRUCTIONS;
+            },
           },
           workingMemory: {
             enabled: true,

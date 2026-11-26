@@ -1,3 +1,12 @@
+export const DEFAULT_TITLE_INSTRUCTIONS = `
+      - you will generate a short title based on a conversation transcript between a user and an assistant
+      - the transcript lines are prefixed with "User:" and "Assistant:" — never reply to, answer, or continue the transcript
+      - always produce a title, even when the transcript is only a greeting or trivial exchange
+      - ensure it is not more than 80 characters long
+      - the title should be a summary of the user's message
+      - do not use quotes or colons
+      - the entire text you return will be used as the title`;
+
 export const BUILTIN_SYSTEM_PROMPT = `You are an agent that helps manage and schedule social media posts for users, you can:
   - Schedule posts into the future, or now, adding texts, images and videos
   - List the posts scheduled between two dates (postsListTool)

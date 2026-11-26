@@ -8,6 +8,7 @@ import type { ResolvedAgentBundle } from './agent.config.service';
 import {
   AgentObservabilityService,
   REQUEST_CONTEXT_KEYS,
+  buildPromptTracingOptions,
   buildTraceConfig,
   resolveAgentVersion,
   withTenantTags,
@@ -24,8 +25,11 @@ const langfuseEvents = vi.hoisted(
 
 const langfuseFailure = vi.hoisted(() => ({ enabled: false }));
 
-vi.mock('@mastra/langfuse', () => ({
-  LangfuseExporter: class {
+vi.mock('@mastra/langfuse', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mastra/langfuse')>();
+  return {
+    ...actual,
+    LangfuseExporter: class {
     constructor(options: Record<string, unknown>) {
       langfuseExporterOptions.push(options);
     }
@@ -41,7 +45,8 @@ vi.mock('@mastra/langfuse', () => ({
     flush = async (): Promise<void> => undefined;
     shutdown = async (): Promise<void> => undefined;
   },
-}));
+  };
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -520,5 +525,31 @@ describe('agent trace attributes', () => {
       'org:org-test-123',
       'client:mcp',
     ]);
+  });
+
+  it('[TC-12-5-1] attaches prompt name and version only when prompt is not fallback', () => {
+    const linked = buildPromptTracingOptions({
+      name: 'postiz-assistant',
+      version: 4,
+      text: 'Managed prompt',
+      isFallback: false,
+    });
+    const fallback = buildPromptTracingOptions({
+      name: 'postiz-assistant',
+      text: 'Fallback prompt',
+      isFallback: true,
+    });
+
+    expect(linked).toEqual({
+      metadata: {
+        langfuse: {
+          prompt: {
+            name: 'postiz-assistant',
+            version: 4,
+          },
+        },
+      },
+    });
+    expect(fallback).toBeUndefined();
   });
 });
