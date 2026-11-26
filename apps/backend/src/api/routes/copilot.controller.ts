@@ -225,7 +225,12 @@ export class CopilotController {
         perPage: HISTORY_PAGE_SIZE,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
-      return { ...page, messages: page.messages.reverse() };
+      const messages = [...page.messages].sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return aTime - bTime;
+      });
+      return { ...page, messages };
     } catch (err) {
       Logger.warn(`Could not recall messages for thread ${threadId}: ${err}`);
       throw new ServiceUnavailableException('Could not load the conversation');
