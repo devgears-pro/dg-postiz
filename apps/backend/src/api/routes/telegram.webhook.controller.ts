@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Headers,
   HttpCode,
+  Inject,
   Post,
 } from '@nestjs/common';
 import {
@@ -12,9 +13,17 @@ import {
 } from '@gitroom/nestjs-libraries/chat/telegram.assistant.service';
 import { verifyTelegramWebhookSecret } from '@gitroom/nestjs-libraries/chat/telegram.assistant.format';
 
+export type TelegramUpdateProcessor = Pick<
+  TelegramAssistantService,
+  'processUpdate'
+>;
+
 @Controller('/communication-channels/telegram')
 export class TelegramWebhookController {
-  constructor(private _telegramService: TelegramAssistantService) {}
+  constructor(
+    @Inject(TelegramAssistantService)
+    private _telegramService: TelegramUpdateProcessor
+  ) {}
 
   @Post('/webhook')
   @HttpCode(200)

@@ -153,13 +153,15 @@ export const CommunicationChannelsComponent = () => {
           t('telegram_disconnected_toast', 'Telegram disconnected')
         );
         await mutate();
+      } else {
+        toast.show(
+          t('telegram_disconnect_failed', 'Could not disconnect Telegram'),
+          'warning'
+        );
       }
     } catch {
       toast.show(
-        t(
-          'telegram_connect_failed',
-          'Could not generate Telegram connection link'
-        ),
+        t('telegram_disconnect_failed', 'Could not disconnect Telegram'),
         'warning'
       );
     } finally {
@@ -189,7 +191,7 @@ export const CommunicationChannelsComponent = () => {
         </p>
       </div>
 
-      {tgToken && (
+      {tgToken && !data?.connected && (
         <div className="p-[16px] rounded-[8px] border border-fifth bg-sixth flex flex-col gap-[10px]">
           <div className="text-[15px] font-[600]">
             {t('telegram_confirm_title', 'Confirm Telegram connection')}

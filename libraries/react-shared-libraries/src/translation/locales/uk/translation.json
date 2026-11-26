@@ -1416,12 +1416,11 @@
   "telegram_confirm_failed": "Не вдалося підтвердити підключення Telegram",
   "telegram_connected_toast": "Telegram підключено до простору",
   "telegram_disconnected_toast": "Telegram відключено",
+  "telegram_disconnect_failed": "Не вдалося відключити Telegram",
   "telegram_linked_as": "Підключений акаунт: @{{username}}",
   "telegram_linked": "Акаунт Telegram підключено.",
   "telegram_connect_hint": "Підключіть Telegram, щоб починати й продовжувати чати з асистентом з телефону.",
-  "connect_telegram": "Підключити Telegram",
   "open_in_telegram": "Відкрити в Telegram",
-  "disconnect": "Відключити",
   "not_connected": "Не підключено",
   "not_configured": "Не налаштовано"
 }

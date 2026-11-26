@@ -1071,12 +1071,11 @@
   "telegram_confirm_failed": "Could not confirm Telegram connection",
   "telegram_connected_toast": "Telegram connected to your workspace",
   "telegram_disconnected_toast": "Telegram disconnected",
+  "telegram_disconnect_failed": "Could not disconnect Telegram",
   "telegram_linked_as": "Linked account: @{{username}}",
   "telegram_linked": "Telegram account is linked.",
   "telegram_connect_hint": "Connect Telegram to start or continue AI assistant chats from your phone.",
-  "connect_telegram": "Connect Telegram",
   "open_in_telegram": "Open in Telegram",
-  "disconnect": "Disconnect",
   "not_connected": "Not connected",
   "not_configured": "Not configured"
 }

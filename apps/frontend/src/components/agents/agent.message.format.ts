@@ -3,6 +3,9 @@ type MessagePart = {
   text?: unknown;
 };
 
+const isMessagePart = (part: unknown): part is MessagePart =>
+  Boolean(part) && typeof part === 'object';
+
 const escapeHtml = (value: string) =>
   value
     .replace(/&/g, '&amp;')
@@ -18,23 +21,22 @@ export function formatUserMessageContent(content: unknown): string {
       : Array.isArray(content)
         ? content
             .map((part) => {
-              if (!part || typeof part !== 'object') {
+              if (!isMessagePart(part)) {
                 return '';
               }
-              const typed = part as MessagePart;
-              return typed.type === 'text' ? String(typed.text ?? '') : '';
+              return part.type === 'text' ? String(part.text ?? '') : '';
             })
             .join('')
         : '';
 
   return escapeHtml(text)
-    .replace(/Video: (http.*mp4\n)/g, (_match, source: string) => {
+    .replace(/Video: ((?:https?:\/\/|\/)\S+\.mp4)/g, (_match, source: string) => {
       return `<video controls class="h-[150px] w-[150px] rounded-[8px] mb-[10px]"><source src="${source.trim()}" type="video/mp4">Your browser does not support the video tag.</video>`;
     })
-    .replace(/Image: (http\S+) \(media [^)]+\)/g, (_match, source: string) => {
+    .replace(/Image: ((?:https?:\/\/|\/)\S+) \(media [^)]+\)/g, (_match, source: string) => {
       return `<img src="${source.trim()}" class="h-[150px] w-[150px] max-w-full border border-newBgColorInner" />`;
     })
-    .replace(/Image: (http.*\n)/g, (_match, source: string) => {
+    .replace(/Image: ((?:https?:\/\/|\/)\S+)/g, (_match, source: string) => {
       return `<img src="${source.trim()}" class="h-[150px] w-[150px] max-w-full border border-newBgColorInner" />`;
     })
     .replace(/\[\-\-Media\-\-\](.*)\[\-\-Media\-\-\]/g, (_match, body: string) => {

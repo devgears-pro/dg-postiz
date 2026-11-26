@@ -29,29 +29,75 @@ vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
   },
 }));
 
-import { CommunicationChannelsService } from './communication.channels.service';
+import { CommunicationChannelLink } from '@prisma/client';
+import {
+  AgentRuntimePort,
+  CommunicationChannelsRepositoryPort,
+  CommunicationChannelsService,
+  MastraPort,
+  MembershipPort,
+  SubscriptionPort,
+} from './communication.channels.service';
+
+const LINK: CommunicationChannelLink = {
+  id: 'link-1',
+  userId: 'user-1',
+  organizationId: 'org-1',
+  channel: 'telegram',
+  externalUserId: '123',
+  externalChatId: '123',
+  externalUsername: 'alice',
+  activeThreadId: null,
+  metadata: null,
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+};
+
+const MEMBERSHIP: MembershipPort = {
+  userId: 'user-1',
+  organizationId: 'org-1',
+  role: 'ADMIN',
+  organization: {
+    id: 'org-1',
+    name: 'Org 1',
+    createdAt: new Date(0),
+    subscription: null,
+  },
+};
 
 describe('CommunicationChannelsService', () => {
   const repository = {
-    findByExternalUser: vi.fn(),
-    findByUserAndOrg: vi.fn(),
-    upsertLink: vi.fn(),
-    updateActiveThread: vi.fn(),
-    deleteByUserAndOrg: vi.fn(),
-    findMembership: vi.fn(),
-  };
+    findByExternalUser: vi.fn<
+      CommunicationChannelsRepositoryPort['findByExternalUser']
+    >(),
+    findByUserAndOrg: vi.fn<
+      CommunicationChannelsRepositoryPort['findByUserAndOrg']
+    >(),
+    upsertLink: vi.fn<CommunicationChannelsRepositoryPort['upsertLink']>(),
+    updateActiveThread: vi.fn<
+      CommunicationChannelsRepositoryPort['updateActiveThread']
+    >(),
+    deleteByUserAndOrg: vi.fn<
+      CommunicationChannelsRepositoryPort['deleteByUserAndOrg']
+    >(),
+    findMembership: vi.fn<
+      CommunicationChannelsRepositoryPort['findMembership']
+    >(),
+  } satisfies CommunicationChannelsRepositoryPort;
 
   const subscriptionService = {
-    getSubscriptionByOrganizationId: vi.fn(),
-  };
+    getSubscriptionByOrganizationId: vi.fn<
+      SubscriptionPort['getSubscriptionByOrganizationId']
+    >(),
+  } satisfies SubscriptionPort;
 
   const mastraService = {
-    mastra: vi.fn(),
-  };
+    mastra: vi.fn<MastraPort['mastra']>(),
+  } satisfies MastraPort;
 
   const agentRuntime = {
-    prepare: vi.fn(),
-  };
+    prepare: vi.fn<AgentRuntimePort['prepare']>(),
+  } satisfies AgentRuntimePort;
 
   let service: CommunicationChannelsService;
 
@@ -64,28 +110,20 @@ describe('CommunicationChannelsService', () => {
     process.env.TELEGRAM_ASSISTANT_WEBHOOK_SECRET = 'webhook-secret';
     delete process.env.TELEGRAM_ASSISTANT_POLLING;
     service = new CommunicationChannelsService(
-      repository as never,
-      subscriptionService as never,
-      mastraService as never,
-      agentRuntime as never
+      repository,
+      subscriptionService,
+      mastraService,
+      agentRuntime
     );
   });
 
   it('creates one-time connect link and rejects second consumption', async () => {
-    repository.findMembership.mockResolvedValue({
-      userId: 'user-1',
-      organizationId: 'org-1',
-      organization: { id: 'org-1', name: 'Org 1', createdAt: new Date() },
-    });
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
     repository.upsertLink.mockResolvedValue({
-      id: 'link-1',
-      userId: 'user-1',
-      organizationId: 'org-1',
-      channel: 'telegram',
+      ...LINK,
       externalUserId: '123',
       externalChatId: '123',
       externalUsername: 'alice',
-      activeThreadId: null,
     });
 
     const link = await service.createWebConnectLink(
@@ -124,20 +162,12 @@ describe('CommunicationChannelsService', () => {
   });
 
   it('consumes external token only once', async () => {
-    repository.findMembership.mockResolvedValue({
-      userId: 'user-1',
-      organizationId: 'org-1',
-      organization: { id: 'org-1', name: 'Org 1', createdAt: new Date() },
-    });
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
     repository.upsertLink.mockResolvedValue({
-      id: 'link-1',
-      userId: 'user-1',
-      organizationId: 'org-1',
-      channel: 'telegram',
+      ...LINK,
       externalUserId: '555',
       externalChatId: '555',
       externalUsername: 'bob',
-      activeThreadId: null,
     });
 
     const token = await service.createExternalConnectToken('telegram', {
@@ -161,14 +191,10 @@ describe('CommunicationChannelsService', () => {
 
   it('blocks incoming message if organization membership was revoked', async () => {
     repository.findByExternalUser.mockResolvedValue({
-      id: 'link-1',
-      userId: 'user-1',
-      organizationId: 'org-1',
-      channel: 'telegram',
+      ...LINK,
       externalUserId: '555',
       externalChatId: '555',
       externalUsername: 'bob',
-      activeThreadId: null,
     });
     repository.findMembership.mockResolvedValue(null);
 
@@ -189,20 +215,12 @@ describe('CommunicationChannelsService', () => {
   });
 
   it('shows the pending Telegram account without consuming the token', async () => {
-    repository.findMembership.mockResolvedValue({
-      userId: 'user-1',
-      organizationId: 'org-1',
-      organization: { id: 'org-1', name: 'Org 1', createdAt: new Date() },
-    });
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
     repository.upsertLink.mockResolvedValue({
-      id: 'link-1',
-      userId: 'user-1',
-      organizationId: 'org-1',
-      channel: 'telegram',
+      ...LINK,
       externalUserId: '777',
       externalChatId: '777',
       externalUsername: 'alice',
-      activeThreadId: null,
     });
 
     const token = await service.createExternalConnectToken('telegram', {
@@ -229,5 +247,78 @@ describe('CommunicationChannelsService', () => {
     await expect(
       service.getExternalConnectPreview('telegram', '0123456789abcdef')
     ).resolves.toBeNull();
+  });
+
+  it('passes full organization subscription and user role into RequestContext', async () => {
+    repository.findByExternalUser.mockResolvedValue({
+      id: 'link-1',
+      userId: 'user-1',
+      organizationId: 'org-1',
+      channel: 'telegram',
+      externalUserId: '555',
+      externalChatId: '555',
+      externalUsername: 'bob',
+      activeThreadId: null,
+      metadata: null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    repository.findMembership.mockResolvedValue({
+      userId: 'user-1',
+      organizationId: 'org-1',
+      role: 'USER',
+      organization: {
+        id: 'org-1',
+        name: 'Org 1',
+        createdAt: new Date(0),
+        subscription: { subscriptionTier: 'PRO' },
+      },
+    });
+    repository.updateActiveThread.mockResolvedValue({
+      id: 'link-1',
+      userId: 'user-1',
+      organizationId: 'org-1',
+      channel: 'telegram',
+      externalUserId: '555',
+      externalChatId: '555',
+      externalUsername: 'bob',
+      activeThreadId: 'thread-1',
+      metadata: null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    const streamMock = vi.fn<
+      (
+        msg: string,
+        opts: {
+          memory: { thread: string; resource: string };
+          requestContext: { getRaw: (k: string) => unknown };
+        }
+      ) => Promise<{ text: Promise<string>; steps: Promise<unknown> }>
+    >(async (_msg, opts) => {
+      const org = JSON.parse(
+        String(opts.requestContext.getRaw('organization'))
+      );
+      expect(org.subscription.subscriptionTier).toBe('PRO');
+      expect(org.users).toEqual([{ role: 'USER' }]);
+      return {
+        text: Promise.resolve('ok'),
+        steps: Promise.resolve([]),
+      };
+    });
+    mastraService.mastra.mockResolvedValue({
+      getAgent: () => ({
+        getMemory: async () => undefined,
+        stream: streamMock,
+      }),
+    });
+    agentRuntime.prepare.mockResolvedValue({
+      applyTo: () => undefined,
+      release: async () => undefined,
+    });
+
+    const res = await service.handleIncomingMessage('telegram', '555', 'hello');
+    expect(res.status).toBe('ok');
+    expect(streamMock).toHaveBeenCalledTimes(1);
   });
 });

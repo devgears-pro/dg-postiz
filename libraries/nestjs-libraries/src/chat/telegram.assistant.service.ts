@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   OnModuleDestroy,
@@ -66,6 +67,19 @@ type InlineButton = {
   callback_data?: string;
 };
 
+export type TelegramChannelsPort = Pick<
+  CommunicationChannelsService,
+  | 'getAuthorizedLink'
+  | 'createExternalConnectToken'
+  | 'confirmWebToken'
+  | 'listThreadsForExternalUser'
+  | 'selectThreadForExternalUser'
+  | 'startNewThreadForExternalUser'
+  | 'handleIncomingMessage'
+>;
+
+export type TelegramMediaPort = Pick<MediaService, 'saveFile'>;
+
 @Injectable()
 export class TelegramAssistantService
   implements OnModuleInit, OnModuleDestroy
@@ -75,17 +89,29 @@ export class TelegramAssistantService
   private _pollingOffset = 0;
 
   constructor(
-    private _channelsService: CommunicationChannelsService,
-    private _mediaService: MediaService
+    @Inject(CommunicationChannelsService)
+    private _channelsService: TelegramChannelsPort,
+    @Inject(MediaService)
+    private _mediaService: TelegramMediaPort
   ) {}
 
   onModuleInit() {
+    if (this._getToken()) {
+      void this._registerCommands();
+    }
     if (
       process.env.TELEGRAM_ASSISTANT_POLLING === 'true' &&
       this._getToken()
     ) {
       this._pollingActive = true;
       void this._startPolling();
+      return;
+    }
+    if (
+      this._getToken() &&
+      process.env.TELEGRAM_ASSISTANT_WEBHOOK_SECRET
+    ) {
+      void this._registerWebhook();
     }
   }
 
@@ -96,6 +122,53 @@ export class TelegramAssistantService
   private async _startPolling() {
     await this._callTelegram('deleteWebhook', {}).catch(() => null);
     await this._pollLoop();
+  }
+
+  private async _registerCommands() {
+    await this._callTelegram('setMyCommands', {
+      commands: [
+        { command: 'new', description: 'Start a new chat' },
+        { command: 'chats', description: 'Choose a chat' },
+        { command: 'start', description: 'Connect or start' },
+      ],
+    }).catch(() => null);
+  }
+
+  private async _registerWebhook() {
+    const secret = process.env.TELEGRAM_ASSISTANT_WEBHOOK_SECRET;
+    if (!secret) {
+      return;
+    }
+    if (process.env.NODE_ENV !== 'production' || process.env.NOT_SECURED) {
+      this._logger.log(
+        'Telegram assistant webhook registration is skipped outside production'
+      );
+      return;
+    }
+    if (!/^[A-Za-z0-9_-]{1,256}$/.test(secret)) {
+      this._logger.warn(
+        'Telegram assistant webhook secret contains unsupported characters'
+      );
+      return;
+    }
+    const publicUrl = this._frontendUrl();
+    if (!publicUrl.startsWith('https://')) {
+      this._logger.warn(
+        'Telegram assistant webhook requires an HTTPS public URL'
+      );
+      return;
+    }
+    const result = await this._callTelegram('setWebhook', {
+      url: `${publicUrl}/api/communication-channels/telegram/webhook`,
+      secret_token: secret,
+      allowed_updates: ['message', 'callback_query'],
+    }).catch((error) => {
+      this._logger.warn(`Telegram webhook registration failed: ${error}`);
+      return null;
+    });
+    if (result) {
+      this._logger.log('Telegram assistant webhook registered');
+    }
   }
 
   private _getToken(): string | undefined {
@@ -118,27 +191,35 @@ export class TelegramAssistantService
 
   private async _callTelegram<T = unknown>(
     method: string,
-    body: Record<string, unknown>
+    body: Record<string, unknown>,
+    timeoutMs = 25_000
   ): Promise<T | null> {
     const token = this._getToken();
     if (!token) return null;
-    const response = await fetch(
-      `${this._getApiBase()}/bot${token}/${method}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }
-    );
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      this._logger.warn(
-        `Telegram API ${method} failed (${response.status}): ${errorText}`
+    try {
+      const response = await fetch(
+        `${this._getApiBase()}/bot${token}/${method}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs),
+        }
       );
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        this._logger.warn(
+          `Telegram API ${method} failed (${response.status}): ${errorText}`
+        );
+        return null;
+      }
+      const json = (await response.json()) as { ok: boolean; result?: T };
+      return json.ok ? (json.result ?? null) : null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this._logger.warn(`Telegram API ${method} error: ${message}`);
       return null;
     }
-    const json = (await response.json()) as { ok: boolean; result?: T };
-    return json.ok ? (json.result ?? null) : null;
   }
 
   private async _sendMessage(
@@ -175,6 +256,62 @@ export class TelegramAssistantService
     }
   }
 
+  private _resolveLocalUploadPath(mediaPath: string): string | null {
+    let candidate = mediaPath;
+    if (/^https?:\/\//i.test(mediaPath)) {
+      try {
+        const parsed = new URL(mediaPath);
+        const isPrivateHost =
+          parsed.hostname === 'localhost' ||
+          parsed.hostname === '127.0.0.1' ||
+          parsed.hostname === '::1' ||
+          parsed.hostname === '0.0.0.0';
+        const frontendHost = (() => {
+          try {
+            return new URL(this._frontendUrl()).hostname;
+          } catch {
+            return '';
+          }
+        })();
+        if (
+          (isPrivateHost || parsed.hostname === frontendHost) &&
+          parsed.pathname.includes('/uploads/')
+        ) {
+          candidate = parsed.pathname.slice(
+            parsed.pathname.indexOf('/uploads/')
+          );
+        } else {
+          return null;
+        }
+      } catch {
+        return null;
+      }
+    }
+
+    const uploadRoot = resolve(process.env.UPLOAD_DIRECTORY || './uploads');
+    const relativePath = candidate.replace(/^\/+/, '').replace(/^uploads\//, '');
+    const fullPath = resolve(uploadRoot, relativePath);
+    if (!fullPath.startsWith(uploadRoot + sep)) {
+      this._logger.warn(`Blocked invalid Telegram photo path: ${mediaPath}`);
+      return null;
+    }
+    return fullPath;
+  }
+
+  private _photoMimeType(filePath: string): { mime: string; filename: string } {
+    const lower = filePath.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+      return { mime: 'image/jpeg', filename: 'generated.jpg' };
+    }
+    if (lower.endsWith('.webp')) {
+      return { mime: 'image/webp', filename: 'generated.webp' };
+    }
+    if (lower.endsWith('.gif')) {
+      return { mime: 'image/gif', filename: 'generated.gif' };
+    }
+    return { mime: 'image/png', filename: 'generated.png' };
+  }
+
   private async _sendPhoto(
     chatId: string | number,
     mediaPath: string,
@@ -182,7 +319,8 @@ export class TelegramAssistantService
   ) {
     const token = this._getToken();
     if (!token) return;
-    if (/^https?:\/\//i.test(mediaPath)) {
+    const localPath = this._resolveLocalUploadPath(mediaPath);
+    if (!localPath && /^https?:\/\//i.test(mediaPath)) {
       await this._callTelegram('sendPhoto', {
         chat_id: chatId,
         photo: mediaPath,
@@ -190,23 +328,21 @@ export class TelegramAssistantService
       });
       return;
     }
-
-    const uploadRoot = resolve(process.env.UPLOAD_DIRECTORY || './uploads');
-    const relativePath = mediaPath.replace(/^\/+/, '').replace(/^uploads\//, '');
-    const fullPath = resolve(uploadRoot, relativePath);
-    if (!fullPath.startsWith(uploadRoot + sep)) {
-      this._logger.warn(`Blocked invalid Telegram photo path: ${mediaPath}`);
+    if (!localPath) {
       return;
     }
     try {
-      const buffer = await readFile(fullPath);
+      const buffer = await readFile(localPath);
+      if (buffer.length > 10 * 1024 * 1024) {
+        this._logger.warn(
+          `Skipped Telegram sendPhoto for oversized file (${buffer.length} bytes)`
+        );
+        return;
+      }
+      const { mime, filename } = this._photoMimeType(localPath);
       const form = new FormData();
       form.append('chat_id', String(chatId));
-      form.append(
-        'photo',
-        new Blob([buffer], { type: 'image/png' }),
-        'generated.png'
-      );
+      form.append('photo', new Blob([buffer], { type: mime }), filename);
       if (caption) {
         form.append('caption', caption.slice(0, 1024));
       }
@@ -215,6 +351,7 @@ export class TelegramAssistantService
         {
           method: 'POST',
           body: form,
+          signal: AbortSignal.timeout(20_000),
         }
       );
       if (!photoResponse.ok) {
@@ -224,7 +361,8 @@ export class TelegramAssistantService
         );
       }
     } catch (error) {
-      this._logger.warn(`Failed to send Telegram photo ${fullPath}: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this._logger.warn(`Failed to send Telegram photo: ${message}`);
     }
   }
 
@@ -244,7 +382,8 @@ export class TelegramAssistantService
       return null;
     }
     const downloadResponse = await fetch(
-      `${this._getApiBase()}/file/bot${token}/${fileInfo.file_path}`
+      `${this._getApiBase()}/file/bot${token}/${fileInfo.file_path}`,
+      { signal: AbortSignal.timeout(20_000) }
     );
     if (!downloadResponse.ok || !downloadResponse.body) {
       return null;
@@ -273,25 +412,34 @@ export class TelegramAssistantService
           {
             offset: this._pollingOffset,
             timeout: 20,
-          }
+          },
+          30_000
         );
         if (Array.isArray(updates)) {
           for (const update of updates) {
-            this._pollingOffset = Math.max(
-              this._pollingOffset,
-              update.update_id + 1
-            );
             try {
               await this.processUpdate(update);
+              this._pollingOffset = Math.max(
+                this._pollingOffset,
+                update.update_id + 1
+              );
             } catch (err) {
-              this._logger.warn(`Failed to process update ${update.update_id}: ${err}`);
+              const message = err instanceof Error ? err.message : String(err);
+              this._logger.warn(
+                `Failed to process update ${update.update_id}: ${message}`
+              );
+              this._pollingOffset = Math.max(
+                this._pollingOffset,
+                update.update_id + 1
+              );
             }
           }
         } else {
           await new Promise((r) => setTimeout(r, 3000));
         }
       } catch (error) {
-        this._logger.warn(`Telegram polling error: ${error}`);
+        const message = error instanceof Error ? error.message : String(error);
+        this._logger.warn(`Telegram polling error: ${message}`);
         await new Promise((r) => setTimeout(r, 3000));
       }
     }
@@ -420,6 +568,24 @@ export class TelegramAssistantService
         }
         return;
       }
+      const auth = await this._channelsService.getAuthorizedLink(
+        'telegram',
+        externalUserId
+      );
+      if (auth.status === 'ok') {
+        await this._sendMessage(
+          chatId,
+          'Telegram is already connected. Send a message to chat with the assistant.'
+        );
+        return;
+      }
+      if (auth.status === 'unauthorized') {
+        await this._sendMessage(
+          chatId,
+          'Access to this Postiz organization is no longer active.'
+        );
+        return;
+      }
       await this._sendConnectPrompt(chatId, message.from);
       return;
     }
@@ -475,11 +641,21 @@ export class TelegramAssistantService
         await this._sendMessage(chatId, 'No chats yet. Send a message to start one.');
         return;
       }
+      const keyboard = threads
+        .filter((t) => Buffer.byteLength(`tg_t:${t.id}`, 'utf8') <= 64)
+        .map((t) => [
+          {
+            text: (t.title || '').trim().slice(0, 60) || 'Untitled chat',
+            callback_data: `tg_t:${t.id}`,
+          },
+        ]);
+      if (keyboard.length === 0) {
+        await this._sendMessage(chatId, 'No chats available to switch.');
+        return;
+      }
       await this._sendMessage(chatId, 'Select a chat:', {
         replyMarkup: {
-          inline_keyboard: threads.map((t) => [
-            { text: t.title.slice(0, 60), callback_data: `tg_t:${t.id}` },
-          ]),
+          inline_keyboard: keyboard,
         },
       });
       return;
@@ -533,6 +709,12 @@ export class TelegramAssistantService
       chat_id: chatId,
       action: 'typing',
     });
+    const typingTimer = setInterval(() => {
+      void this._callTelegram('sendChatAction', {
+        chat_id: chatId,
+        action: 'typing',
+      }).catch(() => null);
+    }, 4000);
 
     let result: Awaited<
       ReturnType<CommunicationChannelsService['handleIncomingMessage']>
@@ -550,6 +732,8 @@ export class TelegramAssistantService
         'Busy right now. Please wait a moment and try again.'
       );
       return;
+    } finally {
+      clearInterval(typingTimer);
     }
     if (result.status === 'unlinked') {
       await this._sendConnectPrompt(chatId, message.from);

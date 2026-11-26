@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  Inject,
   Param,
   Post,
   Query,
@@ -20,9 +21,24 @@ import {
 } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
 import { CommunicationChannelsService } from '@gitroom/nestjs-libraries/chat/communication.channels.service';
 
+export type CommunicationChannelsPort = Pick<
+  CommunicationChannelsService,
+  | 'getStatus'
+  | 'createWebConnectLink'
+  | 'getExternalConnectPreview'
+  | 'confirmExternalToken'
+  | 'disconnect'
+>;
+
+type UserIdentity = Pick<User, 'id'>;
+type OrganizationIdentity = Pick<Organization, 'id'>;
+
 @Controller('/communication-channels')
 export class CommunicationChannelsController {
-  constructor(private _channelsService: CommunicationChannelsService) {}
+  constructor(
+    @Inject(CommunicationChannelsService)
+    private _channelsService: CommunicationChannelsPort
+  ) {}
 
   private _assertChannel(channel: string) {
     if (channel !== 'telegram') {
@@ -45,8 +61,8 @@ export class CommunicationChannelsController {
   @Get('/:channel/status')
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async getStatus(
-    @GetUserFromRequest() user: User,
-    @GetOrgFromRequest() organization: Organization,
+    @GetUserFromRequest() user: UserIdentity,
+    @GetOrgFromRequest() organization: OrganizationIdentity,
     @Param('channel') channel: string
   ) {
     this._assertChannel(channel);
@@ -56,8 +72,8 @@ export class CommunicationChannelsController {
   @Post('/:channel/connect-link')
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async createConnectLink(
-    @GetUserFromRequest() user: User,
-    @GetOrgFromRequest() organization: Organization,
+    @GetUserFromRequest() user: UserIdentity,
+    @GetOrgFromRequest() organization: OrganizationIdentity,
     @Param('channel') channel: string,
     @Headers('origin') origin: string | undefined
   ) {
@@ -90,8 +106,8 @@ export class CommunicationChannelsController {
   @Post('/:channel/confirm')
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async confirmConnection(
-    @GetUserFromRequest() user: User,
-    @GetOrgFromRequest() organization: Organization,
+    @GetUserFromRequest() user: UserIdentity,
+    @GetOrgFromRequest() organization: OrganizationIdentity,
     @Param('channel') channel: string,
     @Body() body: { token?: string },
     @Headers('origin') origin: string | undefined
@@ -114,8 +130,8 @@ export class CommunicationChannelsController {
   @Delete('/:channel')
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async disconnect(
-    @GetUserFromRequest() user: User,
-    @GetOrgFromRequest() organization: Organization,
+    @GetUserFromRequest() user: UserIdentity,
+    @GetOrgFromRequest() organization: OrganizationIdentity,
     @Param('channel') channel: string,
     @Headers('origin') origin: string | undefined
   ) {

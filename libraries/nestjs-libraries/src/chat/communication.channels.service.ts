@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
@@ -8,7 +9,10 @@ import {
 import { RequestContext } from '@mastra/core/di';
 import { randomBytes, randomUUID } from 'crypto';
 import { CommunicationChannelLink } from '@prisma/client';
-import { CommunicationChannelsRepository } from '@gitroom/nestjs-libraries/database/prisma/communication-channels/communication.channels.repository';
+import {
+  CommunicationChannelLinkUpsert,
+  CommunicationChannelsRepository,
+} from '@gitroom/nestjs-libraries/database/prisma/communication-channels/communication.channels.repository';
 import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { pricing } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
@@ -25,6 +29,86 @@ const CONNECT_TTL_SECONDS = 600;
 const LOCK_TTL_SECONDS = 120;
 
 export type SupportedCommunicationChannel = 'telegram';
+
+export type MembershipPort = {
+  userId: string;
+  organizationId: string;
+  role?: string;
+  organization: {
+    id: string;
+    name: string;
+    createdAt: Date;
+    subscription?: { subscriptionTier: string } | null;
+  };
+};
+
+export type CommunicationChannelsRepositoryPort = {
+  findByUserAndOrg(
+    userId: string,
+    organizationId: string,
+    channel: string
+  ): Promise<CommunicationChannelLink | null>;
+  findByExternalUser(
+    channel: string,
+    externalUserId: string
+  ): Promise<CommunicationChannelLink | null>;
+  upsertLink(
+    input: CommunicationChannelLinkUpsert
+  ): Promise<CommunicationChannelLink>;
+  updateActiveThread(
+    id: string,
+    activeThreadId: string | null
+  ): Promise<CommunicationChannelLink>;
+  deleteByUserAndOrg(
+    userId: string,
+    organizationId: string,
+    channel: string
+  ): Promise<number>;
+  findMembership(
+    userId: string,
+    organizationId: string
+  ): Promise<MembershipPort | null>;
+};
+
+export type SubscriptionPort = Pick<
+  SubscriptionService,
+  'getSubscriptionByOrganizationId'
+>;
+
+type MastraAgentMemory = Awaited<
+  ReturnType<
+    Awaited<
+      ReturnType<
+        Awaited<ReturnType<MastraService['mastra']>>['getAgent']
+      >
+    >['getMemory']
+  >
+>;
+
+export type MastraPort = {
+  mastra(): Promise<{
+    getAgent(name: 'postiz'): {
+      getMemory(): Promise<MastraAgentMemory>;
+      stream(
+        message: string,
+        options: {
+          memory: { thread: string; resource: string };
+          requestContext: RequestContext;
+        }
+      ): Promise<{ text: Promise<string>; steps: Promise<unknown> }>;
+    };
+  }>;
+};
+
+export type AgentRuntimePort = {
+  prepare(
+    organizationId: string,
+    options: { ui: boolean; external?: boolean }
+  ): Promise<{
+    applyTo(requestContext: RequestContext): void;
+    release(): Promise<void>;
+  }>;
+};
 
 type WebConnectPayload = {
   userId: string;
@@ -117,10 +201,14 @@ function extractGeneratedImages(steps: unknown): GeneratedMediaAttachment[] {
 @Injectable()
 export class CommunicationChannelsService {
   constructor(
-    private _repository: CommunicationChannelsRepository,
-    private _subscriptionService: SubscriptionService,
-    private _mastraService: MastraService,
-    private _agentRuntime: AgentRuntimeService
+    @Inject(CommunicationChannelsRepository)
+    private _repository: CommunicationChannelsRepositoryPort,
+    @Inject(SubscriptionService)
+    private _subscriptionService: SubscriptionPort,
+    @Inject(MastraService)
+    private _mastraService: MastraPort,
+    @Inject(AgentRuntimeService)
+    private _agentRuntime: AgentRuntimePort
   ) {}
 
   isChannelConfigured(channel: string): boolean {
@@ -325,7 +413,7 @@ export class CommunicationChannelsService {
   ): Promise<
     | { status: 'unlinked' }
     | { status: 'unauthorized' }
-    | { status: 'ok'; link: CommunicationChannelLink }
+    | { status: 'ok'; link: CommunicationChannelLink; membership?: MembershipPort }
   > {
     const link = await this._repository.findByExternalUser(
       channel,
@@ -341,7 +429,7 @@ export class CommunicationChannelsService {
     if (!membership || !(await this.hasAiAccess(link.organizationId))) {
       return { status: 'unauthorized' };
     }
-    return { status: 'ok', link };
+    return { status: 'ok', link, membership };
   }
 
   async listThreadsForExternalUser(
@@ -439,7 +527,7 @@ export class CommunicationChannelsService {
       throw new ServiceUnavailableException('Another message is being processed');
     }
 
-    let prepared: Awaited<ReturnType<AgentRuntimeService['prepare']>> | null =
+    let prepared: Awaited<ReturnType<AgentRuntimePort['prepare']>> | null =
       null;
     try {
       const mastra = await this._mastraService.mastra();
@@ -468,15 +556,24 @@ export class CommunicationChannelsService {
 
       prepared = await this._agentRuntime.prepare(auth.link.organizationId, {
         ui: false,
-        external: true,
+        external: false,
       });
+
+      const organizationPayload = auth.membership?.organization
+        ? {
+            ...auth.membership.organization,
+            users: auth.membership.role
+              ? [{ role: auth.membership.role }]
+              : [],
+          }
+        : { id: auth.link.organizationId };
 
       const requestContext = new RequestContext();
       requestContext.setRaw('ui', 'false');
       requestContext.setRaw('client', channel);
       requestContext.setRaw(
         'organization',
-        JSON.stringify({ id: auth.link.organizationId })
+        JSON.stringify(organizationPayload)
       );
       applyTraceIdentity(requestContext, {
         organizationId: auth.link.organizationId,
@@ -505,9 +602,26 @@ export class CommunicationChannelsService {
       if (prepared) {
         await prepared.release();
       }
-      const currentLock = await ioRedis.get(lockKey);
-      if (currentLock === lockToken) {
-        await ioRedis.del(lockKey);
+      const redisWithEval = ioRedis as unknown as {
+        eval?: (
+          script: string,
+          numKeys: number,
+          key: string,
+          arg: string
+        ) => Promise<unknown>;
+      };
+      if (typeof redisWithEval.eval === 'function') {
+        await redisWithEval.eval(
+          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+          1,
+          lockKey,
+          lockToken
+        );
+      } else {
+        const currentLock = await ioRedis.get(lockKey);
+        if (currentLock === lockToken) {
+          await ioRedis.del(lockKey);
+        }
       }
     }
   }

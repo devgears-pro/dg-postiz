@@ -114,11 +114,13 @@ export class CommunicationChannelsRepository {
         organizationId,
         disabled: false,
         organization: { deletedAt: null },
-        user: { deletedAt: null },
+        user: { deletedAt: null, activated: true },
       },
       include: {
         organization: {
-          select: { id: true, name: true, createdAt: true },
+          include: {
+            subscription: true,
+          },
         },
       },
     });

@@ -9,16 +9,19 @@ vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: {},
 }));
 
-import { TelegramWebhookController } from './telegram.webhook.controller';
+import {
+  TelegramUpdateProcessor,
+  TelegramWebhookController,
+} from './telegram.webhook.controller';
 
 describe('TelegramWebhookController', () => {
-  const processUpdate = vi.fn();
+  const processUpdate = vi.fn<TelegramUpdateProcessor['processUpdate']>();
   let controller: TelegramWebhookController;
 
   beforeEach(() => {
     processUpdate.mockReset();
     process.env.TELEGRAM_ASSISTANT_WEBHOOK_SECRET = 'webhook-secret';
-    controller = new TelegramWebhookController({ processUpdate } as never);
+    controller = new TelegramWebhookController({ processUpdate });
   });
 
   it('rejects an update with an invalid secret', async () => {
