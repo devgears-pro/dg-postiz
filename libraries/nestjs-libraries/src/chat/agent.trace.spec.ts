@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { RequestContext } from '@mastra/core/di';
@@ -8,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyTraceIdentity,
   assertThreadAccess,
+  assertThreadExists,
   buildSessionId,
   loadThreadMemory,
   readRequestThreadId,
@@ -68,6 +70,18 @@ describe('agent trace context', () => {
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
     await expect(
       assertThreadAccess(undefined, 'org-1', 'thread-1')
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('rejects operations on a missing conversation', async () => {
+    await expect(
+      assertThreadExists(memoryWith(null), 'org-1', 'thread-1')
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      assertThreadExists(memoryWith('org-2'), 'org-1', 'thread-1')
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      assertThreadExists(failingMemory, 'org-1', 'thread-1')
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 

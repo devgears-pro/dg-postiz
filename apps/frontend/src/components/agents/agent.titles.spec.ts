@@ -24,7 +24,7 @@ describe('agent thread title polling', () => {
     ).toBe(false);
   });
 
-  it('stops when the polling window expires', () => {
+  it('[TC-2-21-3] stops polling when the window expires', () => {
     expect(
       shouldPollTitles([{ id: 'thread-1', title: '' }], openUntil, openUntil)
     ).toBe(false);

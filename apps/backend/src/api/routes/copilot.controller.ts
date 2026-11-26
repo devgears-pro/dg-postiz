@@ -39,6 +39,7 @@ import {
   assertThreadExists,
   loadThreadMemory,
   readRequestThreadId,
+  readThreadId,
 } from '@gitroom/nestjs-libraries/chat/agent.trace';
 
 export type ChannelsContext = {
@@ -46,6 +47,8 @@ export type ChannelsContext = {
   organization: string;
   ui: string;
 };
+
+const HISTORY_PAGE_SIZE = 200;
 
 // the copilot runtime writes its own CORS headers on the response, keep them aligned with main.ts
 const copilotCors = () => ({
@@ -76,6 +79,14 @@ export class CopilotController {
       );
     }
     return memory;
+  }
+
+  private paramThreadId(value: string) {
+    const threadId = readThreadId({ threadId: value });
+    if (!threadId) {
+      throw new BadRequestException('Invalid conversation id');
+    }
+    return threadId;
   }
 
   @Post('/chat')
@@ -202,17 +213,19 @@ export class CopilotController {
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async getMessagesList(
     @GetOrgFromRequest() organization: Organization,
-    @Param('thread') threadId: string
+    @Param('thread') rawThreadId: string
   ): Promise<unknown> {
+    const threadId = this.paramThreadId(rawThreadId);
     const memory = await this.threadMemory();
-    await assertThreadAccess(memory, organization.id, threadId);
+    await assertThreadExists(memory, organization.id, threadId);
     try {
-      return await memory.recall({
+      const page = await memory.recall({
         resourceId: organization.id,
         threadId,
-        perPage: false,
-        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: HISTORY_PAGE_SIZE,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
+      return { ...page, messages: page.messages.reverse() };
     } catch (err) {
       Logger.warn(`Could not recall messages for thread ${threadId}: ${err}`);
       throw new ServiceUnavailableException('Could not load the conversation');
@@ -223,13 +236,26 @@ export class CopilotController {
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async renameThread(
     @GetOrgFromRequest() organization: Organization,
-    @Param('thread') threadId: string,
+    @Param('thread') rawThreadId: string,
     @Body() body: { title?: unknown }
   ) {
-    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    const threadId = this.paramThreadId(rawThreadId);
+    const title =
+      typeof body?.title === 'string'
+        ? body.title.trim().replace(/\s+/g, ' ')
+        : '';
     if (!title || title.length > 200) {
       throw new BadRequestException(
         'The conversation title must be between 1 and 200 characters'
+      );
+    }
+    if (
+      /[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/.test(
+        title
+      )
+    ) {
+      throw new BadRequestException(
+        'The conversation title contains unsupported characters'
       );
     }
 
@@ -243,8 +269,9 @@ export class CopilotController {
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async deleteThread(
     @GetOrgFromRequest() organization: Organization,
-    @Param('thread') threadId: string
+    @Param('thread') rawThreadId: string
   ) {
+    const threadId = this.paramThreadId(rawThreadId);
     const memory = await this.threadMemory();
     await assertThreadExists(memory, organization.id, threadId);
     await memory.deleteThread(threadId);
@@ -259,7 +286,7 @@ export class CopilotController {
       filter: { resourceId: organization.id },
       perPage: 100000,
       page: 0,
-      orderBy: { field: 'updatedAt', direction: 'DESC' },
+      orderBy: { field: 'createdAt', direction: 'DESC' },
     });
 
     return {

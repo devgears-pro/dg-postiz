@@ -28,11 +28,6 @@ import {
   pollThreadTitles,
   PropertiesContext,
 } from '@gitroom/frontend/components/agents/agent';
-import {
-  forgetThreadMessages,
-  loadThreadMessages,
-  takeThreadMessages,
-} from '@gitroom/frontend/components/agents/agent.thread.messages';
 import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { useParams } from 'next/navigation';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
@@ -174,7 +169,9 @@ const LoadMessages: FC<{
     }
 
     target.threadId = pending.id;
-    if (!(appliedId.current === pending.id && pending.messages.length === 0)) {
+    const alreadyEmpty =
+      appliedId.current === pending.id && pending.messages.length === 0;
+    if (!alreadyEmpty) {
       setMessagesRef.current(pending.messages);
     }
     appliedId.current = pending.id;
@@ -190,9 +187,30 @@ const LoadMessages: FC<{
 
   const loadMessages = useCallback(
     async (idToSet: string) => {
-      const list =
-        takeThreadMessages(idToSet) ??
-        (await loadThreadMessages(fetch, idToSet));
+      const response = await fetch(`/copilot/${idToSet}/list`);
+      if (!response.ok) {
+        throw new Error('Could not load the conversation');
+      }
+
+      const data = await response.json();
+      interface RawMessageItem {
+        content: {
+          content?: string;
+          parts?: Array<{ type: string; text?: string }>;
+        };
+        role: 'user' | 'assistant' | 'system';
+      }
+      const list: AgentMessage[] = (
+        (data.messages as RawMessageItem[]) || []
+      ).map((p) => ({
+        id: makeId(12),
+        content:
+          p.content.content ||
+          (p.content.parts || [])
+            .map((part) => (part.type === 'text' ? part.text || '' : ''))
+            .join(''),
+        role: p.role,
+      }));
 
       if (currentId.current !== idToSet) {
         return;
@@ -212,6 +230,9 @@ const LoadMessages: FC<{
     currentId.current = id;
     appliedId.current = null;
     if (id === 'new') {
+      if (agentRef.current) {
+        agentRef.current.threadId = makeId(21);
+      }
       loaded.current = { id, messages: [] };
       agentRef.current?.setMessages([]);
       onLoadingChange(false);
@@ -322,7 +343,6 @@ const NewInput: FC<InputProps> = (props) => {
   const [docs, setDocs] = useState<SelectedDoc[]>([]);
   const [value, setValue] = useState('');
   const { properties } = useContext(PropertiesContext);
-  const params = useParams<{ id: string }>();
   const fetch = useFetch();
   const toaster = useToaster();
   const t = useT();
@@ -439,9 +459,6 @@ Use the following social media platforms: ${JSON.stringify(
     : ``
 }`
           );
-          if (params.id !== 'new') {
-            forgetThreadMessages(params.id);
-          }
           void send
             .then(() => {
               pollThreadTitles();

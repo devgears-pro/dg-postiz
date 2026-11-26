@@ -100,6 +100,8 @@ const stopRequest = (threadId: string) =>
     body: { method: 'agent/stop', params: { threadId } },
   } as Request);
 
+const infoRequest = () => ({ body: { method: 'info' } } as Request);
+
 const response = () => ({ on: vi.fn() } as unknown as Response);
 
 const organization = { id: 'org-1' } as Organization;
@@ -138,10 +140,11 @@ describe('CopilotController telemetry context', () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 
-  it('[TC-2-26-1] connects and stops without preparing the agent', async () => {
+  it('[TC-2-26-1] serves info, connect and stop without preparing the agent', async () => {
     const { controller, prepare } = buildController('org-1');
     prepare.mockRejectedValue(new Error('The model is unavailable'));
 
+    await controller.agent(infoRequest(), response(), organization, user);
     await controller.agent(
       connectRequest('thread-1'),
       response(),
@@ -206,6 +209,19 @@ describe('CopilotController conversation management', () => {
     expect(result).toEqual({ id: 'thread-1' });
   });
 
+  it('rejects an invalid conversation id before the store call', async () => {
+    const { controller, memory } = buildController('org-1');
+
+    await expect(
+      controller.renameThread(organization, 'bad:id', { title: 'Planning' })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      controller.deleteThread(organization, 'bad:id')
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(memory.updateThread).not.toHaveBeenCalled();
+    expect(memory.deleteThread).not.toHaveBeenCalled();
+  });
+
   it('[TC-2-23-2] rejects deleting a foreign conversation', async () => {
     const { controller, memory } = buildController('org-2');
 
@@ -217,30 +233,38 @@ describe('CopilotController conversation management', () => {
 
   it('returns the full conversation history', async () => {
     const { controller, memory } = buildController('org-1');
+    memory.recall.mockResolvedValueOnce({
+      messages: [{ id: 'message-1' }, { id: 'message-2' }],
+      total: 2,
+      page: 0,
+      perPage: 200,
+      hasMore: false,
+    });
 
-    await controller.getMessagesList(organization, 'thread-1');
+    const result = await controller.getMessagesList(organization, 'thread-1');
 
     expect(memory.recall).toHaveBeenCalledWith(
       expect.objectContaining({
         resourceId: 'org-1',
         threadId: 'thread-1',
-        perPage: false,
-        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: 200,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      })
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        messages: [{ id: 'message-2' }, { id: 'message-1' }],
       })
     );
   });
 
-  it('lists recent conversations first', async () => {
-    const { controller, memory } = buildController('org-1');
+  it('[TC-2-11-5] rejects reading a foreign conversation', async () => {
+    const { controller, memory } = buildController('org-2');
 
-    await controller.getList(organization);
-
-    expect(memory.listThreads).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filter: { resourceId: 'org-1' },
-        orderBy: { field: 'updatedAt', direction: 'DESC' },
-      })
-    );
+    await expect(
+      controller.getMessagesList(organization, 'thread-1')
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(memory.recall).not.toHaveBeenCalled();
   });
 
   it('accepts a conversation title of 200 characters', async () => {

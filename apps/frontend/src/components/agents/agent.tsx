@@ -35,10 +35,6 @@ import { EventEmitter } from 'events';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import {
-  forgetThreadMessages,
-  prefetchThreadMessages,
-} from '@gitroom/frontend/components/agents/agent.thread.messages';
-import {
   shouldPollTitles,
   ThreadSummary,
   TITLE_POLL_INTERVAL_MS,
@@ -321,8 +317,6 @@ export const Agent: FC<{ children: ReactNode }> = ({ children }) => {
   );
 };
 
-type Thread = ThreadSummary;
-
 export const chatResetEmitter = new EventEmitter();
 
 let titlePollingUntil = Date.now() + TITLE_POLL_WINDOW_MS;
@@ -336,14 +330,14 @@ const Threads: FC = () => {
   const router = useRouter();
   const t = useT();
   const toaster = useToaster();
-  const threads = useCallback(async (): Promise<{ threads: Thread[] }> => {
+  const threads = useCallback(async (): Promise<{ threads: ThreadSummary[] }> => {
     return (await fetch('/copilot/list')).json();
   }, [fetch]);
   const { id } = useParams<{ id: string }>();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const savingTitle = useRef(false);
+  const savingTitle = useRef<string | null>(null);
 
   const { data, mutate } = useSWR('threads', threads, {
     refreshInterval: (latest) =>
@@ -352,19 +346,19 @@ const Threads: FC = () => {
         : 0,
   });
 
-  const startRename = (thread: Thread) => () => {
+  const startRename = (thread: ThreadSummary) => () => {
     setEditingId(thread.id);
     setDraftTitle(thread.title?.trim() || '');
   };
 
-  const saveTitle = async (thread: Thread) => {
-    if (savingTitle.current || editingId !== thread.id) return;
-    savingTitle.current = true;
+  const saveTitle = async (thread: ThreadSummary) => {
+    if (savingTitle.current === thread.id || editingId !== thread.id) return;
+    savingTitle.current = thread.id;
     setEditingId(null);
 
     const title = draftTitle.trim();
     if (!title || title === thread.title?.trim()) {
-      savingTitle.current = false;
+      savingTitle.current = null;
       return;
     }
 
@@ -384,12 +378,14 @@ const Threads: FC = () => {
         'warning'
       );
     } finally {
-      savingTitle.current = false;
+      if (savingTitle.current === thread.id) {
+        savingTitle.current = null;
+      }
       setBusyId(null);
     }
   };
 
-  const removeThread = (thread: Thread) => async () => {
+  const removeThread = (thread: ThreadSummary) => async () => {
     if (
       !(await deleteDialog(
         t('delete_chat_confirm', 'Delete this chat? This cannot be undone.')
@@ -406,10 +402,9 @@ const Threads: FC = () => {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('delete failed');
-      forgetThreadMessages(thread.id);
       await mutate();
       if (thread.id === id) {
-        router.push('/agents/new');
+        router.replace('/agents/new');
       } else if (thread.id === activeNewId) {
         chatResetEmitter.emit('reset');
       }
@@ -497,12 +492,6 @@ const Threads: FC = () => {
                       className="min-w-0 flex-1 overflow-ellipsis overflow-hidden whitespace-nowrap cursor-pointer"
                       href={`/agents/${p.id}`}
                       title={title}
-                      onMouseEnter={() => {
-                        if (p.id !== id) prefetchThreadMessages(fetch, p.id);
-                      }}
-                      onFocus={() => {
-                        if (p.id !== id) prefetchThreadMessages(fetch, p.id);
-                      }}
                     >
                       {title}
                     </Link>
