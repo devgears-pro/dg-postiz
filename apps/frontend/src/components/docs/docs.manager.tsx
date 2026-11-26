@@ -325,7 +325,8 @@ export const DocsManager: FC = () => {
               ext
                 ? t(
                     'docs_keep_extension',
-                    `Keep the .${ext} file extension`
+                    'Keep the .{{ext}} file extension',
+                    { ext }
                   )
                 : undefined
             }
@@ -414,7 +415,7 @@ export const DocsManager: FC = () => {
     >
       <div className="flex flex-wrap items-center justify-between gap-[12px]">
         <nav
-          aria-label="Breadcrumb"
+          aria-label={t('docs_breadcrumb', 'Breadcrumb')}
           className="flex flex-wrap items-center gap-[6px] text-[14px] min-w-0"
         >
           <button
