@@ -53,9 +53,8 @@ export const Input = ({
   };
 
   const isInProgress = inProgress;
-  const buttonIcon = !isReady
-    ? context.icons.spinnerIcon
-    : isInProgress && !hideStopButton
+  const buttonIcon =
+    isInProgress && !hideStopButton
       ? context.icons.stopIcon
       : context.icons.sendIcon;
 

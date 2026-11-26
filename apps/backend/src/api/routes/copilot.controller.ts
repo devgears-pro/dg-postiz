@@ -1,7 +1,11 @@
 import {
+  BadRequestException,
+  Body,
   Logger,
   Controller,
+  Delete,
   Get,
+  Patch,
   Post,
   Req,
   Res,
@@ -32,6 +36,7 @@ import { AgentRuntimeService } from '@gitroom/nestjs-libraries/chat/agent.runtim
 import {
   applyTraceIdentity,
   assertThreadAccess,
+  assertThreadExists,
   loadThreadMemory,
   readRequestThreadId,
 } from '@gitroom/nestjs-libraries/chat/agent.trace';
@@ -59,6 +64,20 @@ export class CopilotController {
     private _mastraService: MastraService,
     private _agentRuntime: AgentRuntimeService
   ) {}
+
+  private async threadMemory() {
+    const mastra = await this._mastraService.mastra();
+    const memory = await loadThreadMemory(() =>
+      mastra.getAgent('postiz').getMemory()
+    );
+    if (!memory) {
+      throw new ServiceUnavailableException(
+        'Could not verify the conversation'
+      );
+    }
+    return memory;
+  }
+
   @Post('/chat')
   chatAgent(@Req() req: Request, @Res() res: Response) {
     if (
@@ -103,25 +122,34 @@ export class CopilotController {
       await assertThreadAccess(memory, organization.id, threadId);
     }
 
-    const prepared = await this._agentRuntime
-      .prepare(organization.id, { ui: true })
-      .catch((error) => {
-        Logger.warn(
-          `Could not prepare the agent for ${organization.id}: ${error}`
-        );
-        throw new ServiceUnavailableException(
-          'The agent is not configured correctly for this organization'
-        );
-      });
+    const method = req?.body?.method;
+    const skipPrepare =
+      method === 'agent/connect' ||
+      method === 'agent/stop' ||
+      method === 'info';
+    const prepared = skipPrepare
+      ? undefined
+      : await this._agentRuntime
+          .prepare(organization.id, { ui: true })
+          .catch((error) => {
+            Logger.warn(
+              `Could not prepare the agent for ${organization.id}: ${error}`
+            );
+            throw new ServiceUnavailableException(
+              'The agent is not configured correctly for this organization'
+            );
+          });
 
     let released = false;
     const release = () => {
       if (released) return;
       released = true;
-      prepared.release().catch(() => undefined);
+      prepared?.release().catch(() => undefined);
     };
-    res.on('finish', release);
-    res.on('close', release);
+    if (prepared) {
+      res.on('finish', release);
+      res.on('close', release);
+    }
 
     const requestContext = new RequestContext<ChannelsContext>();
     requestContext.set(
@@ -136,7 +164,7 @@ export class CopilotController {
       userId: user.id,
       threadId,
     });
-    prepared.applyTo(requestContext);
+    prepared?.applyTo(requestContext);
 
     const agents = MastraAgent.getLocalAgents({
       resourceId: organization.id,
@@ -176,29 +204,62 @@ export class CopilotController {
     @GetOrgFromRequest() organization: Organization,
     @Param('thread') threadId: string
   ): Promise<unknown> {
-    const mastra = await this._mastraService.mastra();
-    const memory = await mastra.getAgent('postiz').getMemory();
+    const memory = await this.threadMemory();
+    await assertThreadAccess(memory, organization.id, threadId);
     try {
       return await memory.recall({
         resourceId: organization.id,
         threadId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
       });
     } catch (err) {
       Logger.warn(`Could not recall messages for thread ${threadId}: ${err}`);
-      return { messages: [] };
+      throw new ServiceUnavailableException('Could not load the conversation');
     }
+  }
+
+  @Patch('/:thread')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  async renameThread(
+    @GetOrgFromRequest() organization: Organization,
+    @Param('thread') threadId: string,
+    @Body() body: { title?: unknown }
+  ) {
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    if (!title || title.length > 200) {
+      throw new BadRequestException(
+        'The conversation title must be between 1 and 200 characters'
+      );
+    }
+
+    const memory = await this.threadMemory();
+    await assertThreadExists(memory, organization.id, threadId);
+    const updated = await memory.updateThread({ id: threadId, title });
+    return { id: updated.id, title: updated.title };
+  }
+
+  @Delete('/:thread')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  async deleteThread(
+    @GetOrgFromRequest() organization: Organization,
+    @Param('thread') threadId: string
+  ) {
+    const memory = await this.threadMemory();
+    await assertThreadExists(memory, organization.id, threadId);
+    await memory.deleteThread(threadId);
+    return { id: threadId };
   }
 
   @Get('/list')
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async getList(@GetOrgFromRequest() organization: Organization) {
-    const mastra = await this._mastraService.mastra();
-    const memory = await mastra.getAgent('postiz').getMemory();
+    const memory = await this.threadMemory();
     const list = await memory.listThreads({
       filter: { resourceId: organization.id },
       perPage: 100000,
       page: 0,
-      orderBy: { field: 'createdAt', direction: 'DESC' },
+      orderBy: { field: 'updatedAt', direction: 'DESC' },
     });
 
     return {
