@@ -20,20 +20,18 @@ import { useModals } from '@gitroom/frontend/components/layout/new-modal';
 import {
   CopilotKit,
   useCopilotAction,
-  useCopilotMessagesContext,
+  useCopilotChatInternal,
 } from '@copilotkit/react-core';
 import {
+  chatResetEmitter,
   MediaPortal,
+  pollThreadTitles,
   PropertiesContext,
 } from '@gitroom/frontend/components/agents/agent';
 import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { useParams } from 'next/navigation';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import {
-  Message as CopilotMessage,
-  MessageRole,
-  TextMessage,
-} from '@copilotkit/runtime-client-gql';
+import { mutate } from 'swr';
 import { AddEditModal } from '@gitroom/frontend/components/new-launch/add.edit.modal';
 import dayjs from 'dayjs';
 import { fromUtc } from '@gitroom/frontend/components/layout/set.timezone';
@@ -49,6 +47,7 @@ export const AgentChat: FC = () => {
   const params = useParams<{ id: string }>();
   const { properties } = useContext(PropertiesContext);
   const t = useT();
+  const [historyLoading, setHistoryLoading] = useState(params.id !== 'new');
 
   return (
     <CopilotKit
@@ -63,7 +62,7 @@ export const AgentChat: FC = () => {
       }}
     >
       <Hooks />
-      <LoadMessages id={params.id} />
+      <LoadMessages id={params.id} onLoadingChange={setHistoryLoading} />
       <div
         style={
           {
@@ -73,6 +72,21 @@ export const AgentChat: FC = () => {
         }
         className="trz agent bg-newBgColorInner flex flex-col gap-[15px] transition-all flex-1 min-w-0 w-full items-center relative"
       >
+        {historyLoading && (
+          <div
+            data-testid="chat-history-loading"
+            role="status"
+            aria-live="polite"
+            className="absolute inset-0 z-20 bg-newBgColorInner flex flex-col gap-[18px] p-[24px]"
+          >
+            <span className="sr-only">{t('loading', 'Loading')}</span>
+            <div className="h-[14px] w-[58%] rounded bg-newBgColor animate-pulse" />
+            <div className="h-[14px] w-[82%] rounded bg-newBgColor animate-pulse" />
+            <div className="h-[14px] w-[46%] rounded bg-newBgColor animate-pulse" />
+            <div className="mt-[12px] h-[14px] w-[64%] rounded bg-newBgColor animate-pulse self-end" />
+            <div className="h-[14px] w-[38%] rounded bg-newBgColor animate-pulse self-end" />
+          </div>
+        )}
         <div className="absolute left-0 w-full h-full pb-[20px]">
           <CopilotChat
             className="w-full h-full"
@@ -115,77 +129,167 @@ You can also use me as an MCP Server, check Settings >> Agents / Dev
   );
 };
 
-const LoadMessages: FC<{ id: string }> = ({ id }) => {
-  const { messages, setMessages } = useCopilotMessagesContext();
+type AgentMessage = NonNullable<
+  ReturnType<typeof useCopilotChatInternal>['agent']
+>['messages'][number];
+
+const LoadMessages: FC<{
+  id: string;
+  onLoadingChange: (loading: boolean) => void;
+}> = ({ id, onLoadingChange }) => {
+  const { agent, messages, setMessages, isAvailable } =
+    useCopilotChatInternal();
   const fetch = useFetch();
   const currentId = useRef<string | null>(null);
-  const loaded = useRef<{ id: string; messages: CopilotMessage[] } | null>(
-    null
-  );
+  const agentRef = useRef(agent);
+  const setMessagesRef = useRef(setMessages);
+  const availableRef = useRef(isAvailable);
+  const appliedId = useRef<string | null>(null);
+  const loaded = useRef<{ id: string; messages: AgentMessage[] } | null>(null);
+
+  useEffect(() => {
+    agentRef.current = agent;
+  }, [agent]);
+
+  useEffect(() => {
+    setMessagesRef.current = setMessages;
+  }, [setMessages]);
+
+  const applyLoaded = useCallback(() => {
+    const pending = loaded.current;
+    const target = agentRef.current;
+    if (
+      !pending ||
+      pending.id === 'new' ||
+      !target ||
+      !availableRef.current ||
+      pending.id !== id
+    ) {
+      return;
+    }
+
+    target.threadId = pending.id;
+    const alreadyEmpty =
+      appliedId.current === pending.id && pending.messages.length === 0;
+    if (!alreadyEmpty) {
+      setMessagesRef.current([]);
+      setMessagesRef.current(pending.messages);
+    }
+    appliedId.current = pending.id;
+    onLoadingChange(false);
+  }, [id, onLoadingChange]);
+
+  useEffect(() => {
+    availableRef.current = isAvailable;
+    if (isAvailable) {
+      applyLoaded();
+    }
+  }, [isAvailable, applyLoaded]);
 
   const loadMessages = useCallback(
     async (idToSet: string) => {
-      const data = await (await fetch(`/copilot/${idToSet}/list`)).json();
+      const response = await fetch(`/copilot/${idToSet}/list`);
+      if (!response.ok) {
+        throw new Error('Could not load the conversation');
+      }
+
+      const data = await response.json();
       interface RawMessageItem {
+        id?: string;
         content: {
           content?: string;
           parts?: Array<{ type: string; text?: string }>;
         };
         role: 'user' | 'assistant' | 'system';
       }
-      const toRole = (role: 'user' | 'assistant' | 'system'): MessageRole => {
-        if (role === 'assistant') return MessageRole.Assistant;
-        if (role === 'system') return MessageRole.System;
-        return MessageRole.User;
-      };
-      const list = ((data.messages as RawMessageItem[]) || []).map((p) => {
-        return new TextMessage({
-          content:
-            p.content.content ||
-            (p.content.parts || [])
-              .map((part) => (part.type === 'text' ? part.text || '' : ''))
-              .join(''),
-          role: toRole(p.role),
-        });
-      });
+      const list: AgentMessage[] = (
+        (data.messages as RawMessageItem[]) || []
+      ).map((p) => ({
+        id: p.id || makeId(12),
+        content:
+          p.content.content ||
+          (p.content.parts || [])
+            .map((part) => (part.type === 'text' ? part.text || '' : ''))
+            .join(''),
+        role: p.role,
+      }));
 
       if (currentId.current !== idToSet) {
         return;
       }
 
       loaded.current = { id: idToSet, messages: list };
-      setMessages(list);
+      applyLoaded();
     },
-    [fetch, setMessages]
+    [applyLoaded, fetch]
   );
 
   useEffect(() => {
-    currentId.current = id;
-    if (id === 'new') {
-      loaded.current = { id, messages: [] };
-      setMessages([]);
+    if (loaded.current?.id === id) {
       return;
     }
+
+    currentId.current = id;
+    appliedId.current = null;
+    if (id === 'new') {
+      if (agentRef.current) {
+        agentRef.current.threadId = makeId(21);
+      }
+      loaded.current = { id, messages: [] };
+      agentRef.current?.setMessages([]);
+      onLoadingChange(false);
+      return;
+    }
+
     loaded.current = null;
-    loadMessages(id);
-  }, [id, loadMessages, setMessages]);
+    onLoadingChange(true);
+    void loadMessages(id).catch(() => {
+      if (currentId.current === id) {
+        onLoadingChange(false);
+      }
+    });
+  }, [id, loadMessages, onLoadingChange]);
+
+  useEffect(() => {
+    if (id === 'new') return;
+
+    const timer = setTimeout(() => onLoadingChange(false), 10_000);
+    return () => clearTimeout(timer);
+  }, [id, onLoadingChange]);
+
+  useEffect(() => {
+    const reset = () => {
+      if (agentRef.current) {
+        agentRef.current.threadId = makeId(21);
+      }
+      agentRef.current?.setMessages([]);
+      currentId.current = 'new';
+      appliedId.current = null;
+      loaded.current = { id: 'new', messages: [] };
+      onLoadingChange(false);
+    };
+
+    chatResetEmitter.on('reset', reset);
+    return () => {
+      chatResetEmitter.off('reset', reset);
+    };
+  }, [onLoadingChange]);
 
   // CopilotKit resolves loadAgentState to an empty list for Mastra local agents
   // and can clobber the messages we hold, depending on which request resolves last
   useEffect(() => {
-    if (loaded.current?.id !== id) {
+    if (id === 'new' || loaded.current?.id !== id) {
       return;
     }
 
-    if (messages.length) {
-      loaded.current.messages = messages;
+    const current = agent?.messages ?? [];
+    if (current.length && agent?.threadId === id) {
+      loaded.current.messages = current;
       return;
     }
 
-    if (loaded.current.messages.length) {
-      setMessages(loaded.current.messages);
-    }
-  }, [messages, id, setMessages]);
+    applyLoaded();
+  }, [agent, messages, id, applyLoaded]);
 
   return null;
 };
@@ -357,6 +461,12 @@ Use the following social media platforms: ${JSON.stringify(
     : ``
 }`
           );
+          void send
+            .then(() => {
+              pollThreadTitles();
+              return mutate('threads');
+            })
+            .catch(() => undefined);
           setValue('');
           mediaRef.current = [];
           setMedia([]);

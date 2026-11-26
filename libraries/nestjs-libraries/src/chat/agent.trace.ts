@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 
@@ -130,6 +131,35 @@ export const assertThreadAccess = async (
   }
 
   if (thread && thread.resourceId !== organizationId) {
+    throw new ForbiddenException(
+      'The conversation belongs to another organization'
+    );
+  }
+};
+
+export const assertThreadExists = async (
+  memory: ThreadLookup | undefined,
+  organizationId: string,
+  threadId: string
+): Promise<void> => {
+  if (!memory) {
+    Logger.warn('The conversation store is not available');
+    throw new ServiceUnavailableException('Could not verify the conversation');
+  }
+
+  let thread: { resourceId?: string } | null;
+  try {
+    thread = await memory.getThreadById({ threadId });
+  } catch (error) {
+    Logger.warn(`Could not verify the conversation ${threadId}: ${error}`);
+    throw new ServiceUnavailableException('Could not verify the conversation');
+  }
+
+  if (!thread) {
+    throw new NotFoundException('The conversation does not exist');
+  }
+
+  if (thread.resourceId !== organizationId) {
     throw new ForbiddenException(
       'The conversation belongs to another organization'
     );

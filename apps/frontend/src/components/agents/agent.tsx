@@ -5,6 +5,7 @@ import React, {
   FC,
   useCallback,
   useMemo,
+  useRef,
   useState,
   ReactNode,
 } from 'react';
@@ -28,8 +29,17 @@ import {
 } from '@gitroom/frontend/components/docs/docs.picker.modal';
 import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
 import Link from 'next/link';
-import { useParams, usePathname, useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { EventEmitter } from 'events';
+import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
+import { useToaster } from '@gitroom/react/toaster/toaster';
+import {
+  shouldPollTitles,
+  ThreadSummary,
+  TITLE_POLL_INTERVAL_MS,
+  TITLE_POLL_WINDOW_MS,
+} from '@gitroom/frontend/components/agents/agent.titles';
 
 export const MediaPortal: FC<{
   media: { path: string; id: string }[];
@@ -307,17 +317,107 @@ export const Agent: FC<{ children: ReactNode }> = ({ children }) => {
   );
 };
 
+export const chatResetEmitter = new EventEmitter();
+
+let titlePollingUntil = Date.now() + TITLE_POLL_WINDOW_MS;
+
+export const pollThreadTitles = () => {
+  titlePollingUntil = Date.now() + TITLE_POLL_WINDOW_MS;
+};
+
 const Threads: FC = () => {
   const fetch = useFetch();
   const router = useRouter();
-  const pathname = usePathname();
   const t = useT();
-  const threads = useCallback(async () => {
+  const toaster = useToaster();
+  const threads = useCallback(async (): Promise<{ threads: ThreadSummary[] }> => {
     return (await fetch('/copilot/list')).json();
   }, [fetch]);
   const { id } = useParams<{ id: string }>();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const savingTitle = useRef<string | null>(null);
 
-  const { data } = useSWR('threads', threads);
+  const { data, mutate } = useSWR('threads', threads, {
+    refreshInterval: (latest) =>
+      shouldPollTitles(latest?.threads, titlePollingUntil, Date.now())
+        ? TITLE_POLL_INTERVAL_MS
+        : 0,
+  });
+
+  const startRename = (thread: ThreadSummary) => () => {
+    setEditingId(thread.id);
+    setDraftTitle(thread.title?.trim() || '');
+  };
+
+  const saveTitle = async (thread: ThreadSummary) => {
+    if (savingTitle.current === thread.id || editingId !== thread.id) return;
+    savingTitle.current = thread.id;
+    setEditingId(null);
+
+    const title = draftTitle.trim();
+    if (!title || title === thread.title?.trim()) {
+      savingTitle.current = null;
+      return;
+    }
+
+    setBusyId(thread.id);
+    try {
+      const response = await fetch(`/copilot/${thread.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title }),
+      });
+      if (!response.ok) throw new Error('rename failed');
+      await mutate();
+      toaster.show(t('chat_renamed', 'Chat renamed'), 'success');
+    } catch {
+      setEditingId(thread.id);
+      toaster.show(
+        t('chat_action_failed', 'Could not update the chat.'),
+        'warning'
+      );
+    } finally {
+      if (savingTitle.current === thread.id) {
+        savingTitle.current = null;
+      }
+      setBusyId(null);
+    }
+  };
+
+  const removeThread = (thread: ThreadSummary) => async () => {
+    if (
+      !(await deleteDialog(
+        t('delete_chat_confirm', 'Delete this chat? This cannot be undone.')
+      ))
+    ) {
+      return;
+    }
+
+    const activeNewId = id === 'new' ? data?.threads?.[0]?.id : undefined;
+
+    setBusyId(thread.id);
+    try {
+      const response = await fetch(`/copilot/${thread.id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('delete failed');
+      await mutate();
+      if (thread.id === id) {
+        router.replace('/agents/new');
+      } else if (thread.id === activeNewId) {
+        chatResetEmitter.emit('reset');
+      }
+      toaster.show(t('chat_deleted', 'Chat deleted'), 'success');
+    } catch {
+      toaster.show(
+        t('chat_action_failed', 'Could not update the chat.'),
+        'warning'
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <div
@@ -354,18 +454,108 @@ const Threads: FC = () => {
           </Link>
         </div>
         <div className="flex flex-col gap-[1px] mobile:flex-row mobile:gap-[4px]">
-          {data?.threads?.map((p: { id: string; title: string }) => (
-            <Link
-              className={clsx(
-                'overflow-ellipsis overflow-hidden whitespace-nowrap hover:bg-newBgColor px-[10px] py-[6px] rounded-[10px] cursor-pointer mobile:shrink-0 mobile:max-w-[180px] mobile:border mobile:border-newTableBorder',
-                p.id === id && 'bg-newBgColor'
-              )}
-              href={`/agents/${p.id}`}
-              key={p.id}
-            >
-              {p.title}
-            </Link>
-          ))}
+          {data?.threads?.map((p) => {
+            const title = p.title?.trim() || t('new_chat', 'New chat');
+            const busy = busyId === p.id;
+            return (
+              <div
+                key={p.id}
+                data-testid="thread-row"
+                className={clsx(
+                  'group/thread flex items-center gap-[4px] hover:bg-newBgColor px-[10px] py-[6px] rounded-[10px] mobile:shrink-0 mobile:max-w-[180px] mobile:border mobile:border-newTableBorder',
+                  p.id === id && 'bg-newBgColor'
+                )}
+              >
+                {editingId === p.id ? (
+                  <input
+                    autoFocus
+                    value={draftTitle}
+                    maxLength={200}
+                    aria-label={t('rename_chat', 'Rename chat')}
+                    className="w-full min-w-0 rounded-[6px] border border-newTableBorder bg-newBgColorInner px-[4px] py-[2px] text-[16px] outline-none"
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => setDraftTitle(event.target.value)}
+                    onBlur={() => saveTitle(p)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void saveTitle(p);
+                      }
+                      if (event.key === 'Escape') {
+                        setEditingId(null);
+                      }
+                    }}
+                  />
+                ) : (
+                  <>
+                    <Link
+                      className="min-w-0 flex-1 overflow-ellipsis overflow-hidden whitespace-nowrap cursor-pointer"
+                      href={`/agents/${p.id}`}
+                      title={title}
+                    >
+                      {title}
+                    </Link>
+                    <div
+                      className={clsx(
+                        'flex items-center gap-[2px] shrink-0 transition-opacity',
+                        'opacity-0 group-hover/thread:opacity-100 focus-within:opacity-100 mobile:opacity-100',
+                        busy && 'opacity-50'
+                      )}
+                    >
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={t('rename_chat', 'Rename chat')}
+                        title={t('rename_chat', 'Rename chat')}
+                        className="p-[4px] mobile:p-[8px] opacity-70 hover:opacity-100"
+                        onClick={startRename(p)}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="14"
+                          height="14"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                        >
+                          <path
+                            d="M11.5 2.5 13.5 4.5 5 13H3v-2zM10 4l2 2"
+                            stroke="currentColor"
+                            strokeWidth="1.4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={t('delete_chat', 'Delete chat')}
+                        title={t('delete_chat', 'Delete chat')}
+                        className="p-[4px] mobile:p-[8px] opacity-70 hover:opacity-100 text-red-400"
+                        onClick={removeThread(p)}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="14"
+                          height="14"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                        >
+                          <path
+                            d="M3 4h10M6.5 4V2.5h3V4M4.5 4l.5 9.5h6L11.5 4M6.5 6.5v4M9.5 6.5v4"
+                            stroke="currentColor"
+                            strokeWidth="1.4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
