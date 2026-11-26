@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   Headers,
   HttpCode,
-  Logger,
   Post,
 } from '@nestjs/common';
 import {
@@ -15,8 +14,6 @@ import { verifyTelegramWebhookSecret } from '@gitroom/nestjs-libraries/chat/tele
 
 @Controller('/communication-channels/telegram')
 export class TelegramWebhookController {
-  private readonly _logger = new Logger(TelegramWebhookController.name);
-
   constructor(private _telegramService: TelegramAssistantService) {}
 
   @Post('/webhook')
@@ -29,11 +26,7 @@ export class TelegramWebhookController {
     if (!verifyTelegramWebhookSecret(expectedSecret, secretHeader)) {
       throw new ForbiddenException('Invalid webhook secret');
     }
-    try {
-      await this._telegramService.processUpdate(update);
-    } catch (error) {
-      this._logger.error(`Failed to process Telegram update: ${error}`);
-    }
+    await this._telegramService.processUpdate(update);
     return { ok: true };
   }
 }

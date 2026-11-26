@@ -3,9 +3,12 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
+  Headers,
   Param,
   Post,
+  Query,
 } from '@nestjs/common';
 import { Organization, User } from '@prisma/client';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
@@ -27,6 +30,18 @@ export class CommunicationChannelsController {
     }
   }
 
+  private _assertSameOrigin(origin: string | undefined) {
+    if (!origin) {
+      return;
+    }
+    const allowed = [process.env.FRONTEND_URL, process.env.MAIN_URL]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => value.replace(/\/+$/, ''));
+    if (!allowed.includes(origin.replace(/\/+$/, ''))) {
+      throw new ForbiddenException('Invalid origin');
+    }
+  }
+
   @Get('/:channel/status')
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async getStatus(
@@ -43,14 +58,33 @@ export class CommunicationChannelsController {
   async createConnectLink(
     @GetUserFromRequest() user: User,
     @GetOrgFromRequest() organization: Organization,
-    @Param('channel') channel: string
+    @Param('channel') channel: string,
+    @Headers('origin') origin: string | undefined
   ) {
     this._assertChannel(channel);
+    this._assertSameOrigin(origin);
     return this._channelsService.createWebConnectLink(
       user.id,
       organization.id,
       channel
     );
+  }
+
+  @Get('/:channel/connect-preview')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  async getConnectPreview(
+    @Param('channel') channel: string,
+    @Query('token') token: string
+  ) {
+    this._assertChannel(channel);
+    const preview = await this._channelsService.getExternalConnectPreview(
+      channel,
+      token || ''
+    );
+    if (!preview) {
+      throw new BadRequestException('Connection link expired or already used');
+    }
+    return preview;
   }
 
   @Post('/:channel/confirm')
@@ -59,9 +93,11 @@ export class CommunicationChannelsController {
     @GetUserFromRequest() user: User,
     @GetOrgFromRequest() organization: Organization,
     @Param('channel') channel: string,
-    @Body() body: { token?: string }
+    @Body() body: { token?: string },
+    @Headers('origin') origin: string | undefined
   ) {
     this._assertChannel(channel);
+    this._assertSameOrigin(origin);
     const link = await this._channelsService.confirmExternalToken(
       user.id,
       organization.id,
@@ -80,9 +116,11 @@ export class CommunicationChannelsController {
   async disconnect(
     @GetUserFromRequest() user: User,
     @GetOrgFromRequest() organization: Organization,
-    @Param('channel') channel: string
+    @Param('channel') channel: string,
+    @Headers('origin') origin: string | undefined
   ) {
     this._assertChannel(channel);
+    this._assertSameOrigin(origin);
     return this._channelsService.disconnect(user.id, organization.id, channel);
   }
 }

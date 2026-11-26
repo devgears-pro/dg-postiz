@@ -61,6 +61,8 @@ describe('CommunicationChannelsService', () => {
     delete process.env.STRIPE_PUBLISHABLE_KEY;
     process.env.TELEGRAM_ASSISTANT_TOKEN = 'tg-token';
     process.env.TELEGRAM_ASSISTANT_BOT_NAME = 'postiz_test_bot';
+    process.env.TELEGRAM_ASSISTANT_WEBHOOK_SECRET = 'webhook-secret';
+    delete process.env.TELEGRAM_ASSISTANT_POLLING;
     service = new CommunicationChannelsService(
       repository as never,
       subscriptionService as never,
@@ -172,5 +174,60 @@ describe('CommunicationChannelsService', () => {
 
     const res = await service.handleIncomingMessage('telegram', '555', 'hello');
     expect(res).toEqual({ status: 'unauthorized' });
+  });
+
+  it('requires a delivery transport before reporting Telegram as configured', () => {
+    delete process.env.TELEGRAM_ASSISTANT_WEBHOOK_SECRET;
+    expect(service.isChannelConfigured('telegram')).toBe(false);
+
+    process.env.TELEGRAM_ASSISTANT_WEBHOOK_SECRET = 'webhook-secret';
+    expect(service.isChannelConfigured('telegram')).toBe(true);
+
+    delete process.env.TELEGRAM_ASSISTANT_WEBHOOK_SECRET;
+    process.env.TELEGRAM_ASSISTANT_POLLING = 'true';
+    expect(service.isChannelConfigured('telegram')).toBe(true);
+  });
+
+  it('shows the pending Telegram account without consuming the token', async () => {
+    repository.findMembership.mockResolvedValue({
+      userId: 'user-1',
+      organizationId: 'org-1',
+      organization: { id: 'org-1', name: 'Org 1', createdAt: new Date() },
+    });
+    repository.upsertLink.mockResolvedValue({
+      id: 'link-1',
+      userId: 'user-1',
+      organizationId: 'org-1',
+      channel: 'telegram',
+      externalUserId: '777',
+      externalChatId: '777',
+      externalUsername: 'alice',
+      activeThreadId: null,
+    });
+
+    const token = await service.createExternalConnectToken('telegram', {
+      externalUserId: '777',
+      externalChatId: '777',
+      externalUsername: 'alice',
+    });
+
+    await expect(
+      service.getExternalConnectPreview('telegram', token)
+    ).resolves.toEqual({ username: 'alice' });
+    await expect(
+      service.getExternalConnectPreview('telegram', token)
+    ).resolves.toEqual({ username: 'alice' });
+
+    await service.confirmExternalToken('user-1', 'org-1', 'telegram', token);
+
+    await expect(
+      service.getExternalConnectPreview('telegram', token)
+    ).resolves.toBeNull();
+  });
+
+  it('rejects a preview for an unknown token', async () => {
+    await expect(
+      service.getExternalConnectPreview('telegram', '0123456789abcdef')
+    ).resolves.toBeNull();
   });
 });

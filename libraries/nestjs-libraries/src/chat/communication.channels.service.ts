@@ -127,7 +127,9 @@ export class CommunicationChannelsService {
     if (channel === 'telegram') {
       return Boolean(
         process.env.TELEGRAM_ASSISTANT_TOKEN &&
-          process.env.TELEGRAM_ASSISTANT_BOT_NAME
+          process.env.TELEGRAM_ASSISTANT_BOT_NAME &&
+          (process.env.TELEGRAM_ASSISTANT_WEBHOOK_SECRET ||
+            process.env.TELEGRAM_ASSISTANT_POLLING === 'true')
       );
     }
     return false;
@@ -226,6 +228,25 @@ export class CommunicationChannelsService {
       CONNECT_TTL_SECONDS
     );
     return token;
+  }
+
+  async getExternalConnectPreview(
+    channel: string,
+    token: string
+  ): Promise<{ username: string | null } | null> {
+    if (!token || !/^[a-f0-9]{16,64}$/i.test(token)) {
+      return null;
+    }
+    const raw = await ioRedis.get(extTokenKey(channel, token));
+    if (!raw) {
+      return null;
+    }
+    try {
+      const external = JSON.parse(raw) as ExternalConnectPayload;
+      return { username: external.externalUsername ?? null };
+    } catch {
+      return null;
+    }
   }
 
   async confirmExternalToken(

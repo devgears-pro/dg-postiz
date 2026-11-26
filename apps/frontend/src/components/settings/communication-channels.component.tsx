@@ -17,6 +17,26 @@ type ChannelStatus = {
   botUsername: string | null;
 };
 
+type ConnectPreview = {
+  username: string | null;
+};
+
+const useTelegramConnectPreview = (token: string | null) => {
+  const fetch = useFetch();
+  return useSWR<ConnectPreview>(
+    token ? ['telegram-connect-preview', token] : null,
+    async ([, value]: [string, string]) => {
+      const response = await fetch(
+        `/communication-channels/telegram/connect-preview?token=${encodeURIComponent(value)}`
+      );
+      if (!response.ok) {
+        throw new Error('Connection link expired or already used');
+      }
+      return (await response.json()) as ConnectPreview;
+    }
+  );
+};
+
 export const CommunicationChannelsComponent = () => {
   const fetch = useFetch();
   const toast = useToaster();
@@ -24,6 +44,8 @@ export const CommunicationChannelsComponent = () => {
   const searchParams = useSearchParams();
   const router = useRouter();
   const tgToken = searchParams.get('tg_token');
+  const { data: preview, isLoading: previewLoading } =
+    useTelegramConnectPreview(tgToken);
 
   const [busy, setBusy] = useState(false);
   const [connectUrl, setConnectUrl] = useState<string | null>(null);
@@ -172,17 +194,50 @@ export const CommunicationChannelsComponent = () => {
           <div className="text-[15px] font-[600]">
             {t('telegram_confirm_title', 'Confirm Telegram connection')}
           </div>
-          <p className="text-[14px] text-customColor18">
-            {t(
-              'telegram_confirm_desc',
-              'Click below to link your Telegram account to the active Postiz organization.'
-            )}
-          </p>
-          <div>
-            <Button onClick={handleConfirmExternalToken} disabled={busy}>
-              {t('confirm_connection', 'Confirm connection')}
-            </Button>
-          </div>
+          {previewLoading ? (
+            <p className="text-[14px] text-customColor18">
+              {t('loading', 'Loading...')}
+            </p>
+          ) : preview ? (
+            <>
+              <p className="text-[14px] text-customColor18">
+                {t(
+                  'telegram_confirm_desc',
+                  'Click below to link your Telegram account to the active Postiz organization.'
+                )}
+              </p>
+              <p className="text-[14px]">
+                {preview.username
+                  ? t(
+                      'telegram_confirm_account',
+                      'Telegram account: @{{username}}',
+                      { username: preview.username }
+                    )
+                  : t(
+                      'telegram_confirm_account_unknown',
+                      'Telegram account without a public username'
+                    )}
+              </p>
+              <p className="text-[13px] text-customColor18">
+                {t(
+                  'telegram_confirm_warning',
+                  'Confirm only if this is your own Telegram account.'
+                )}
+              </p>
+              <div>
+                <Button onClick={handleConfirmExternalToken} disabled={busy}>
+                  {t('confirm_connection', 'Confirm connection')}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className="text-[14px] text-customColor18">
+              {t(
+                'telegram_confirm_expired',
+                'This connection link is invalid or expired. Open the bot and request a new link.'
+              )}
+            </p>
+          )}
         </div>
       )}
 

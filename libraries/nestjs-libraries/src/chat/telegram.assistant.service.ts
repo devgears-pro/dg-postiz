@@ -3,6 +3,7 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { readFile } from 'fs/promises';
 import { resolve, sep } from 'path';
@@ -15,6 +16,9 @@ import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { uploadStreamToStorage } from '@gitroom/nestjs-libraries/upload/custom.upload.validation';
 import { MediaService } from '@gitroom/nestjs-libraries/database/prisma/media/media.service';
+
+const PHOTO_ERROR =
+  'Could not read the image. Send a JPEG or PNG up to 10 MB.';
 
 export type TelegramPhotoSize = {
   file_id: string;
@@ -81,12 +85,17 @@ export class TelegramAssistantService
       this._getToken()
     ) {
       this._pollingActive = true;
-      void this._pollLoop();
+      void this._startPolling();
     }
   }
 
   onModuleDestroy() {
     this._pollingActive = false;
+  }
+
+  private async _startPolling() {
+    await this._callTelegram('deleteWebhook', {}).catch(() => null);
+    await this._pollLoop();
   }
 
   private _getToken(): string | undefined {
@@ -278,6 +287,8 @@ export class TelegramAssistantService
               this._logger.warn(`Failed to process update ${update.update_id}: ${err}`);
             }
           }
+        } else {
+          await new Promise((r) => setTimeout(r, 3000));
         }
       } catch (error) {
         this._logger.warn(`Telegram polling error: ${error}`);
@@ -290,19 +301,35 @@ export class TelegramAssistantService
     if (!update || typeof update.update_id !== 'number') {
       return;
     }
-    const dedupKey = `comm:tg:upd:${update.update_id}`;
-    const firstSeen = await ioRedis.set(dedupKey, '1', 'EX', 86400, 'NX');
-    if (!firstSeen) {
+    const processingKey = `comm:tg:upd:${update.update_id}:processing`;
+    const doneKey = `comm:tg:upd:${update.update_id}:done`;
+
+    if (await ioRedis.get(doneKey)) {
       return;
     }
 
-    if (update.callback_query) {
-      await this._handleCallback(update.callback_query);
-      return;
+    const acquired = await ioRedis.set(
+      processingKey,
+      '1',
+      'EX',
+      600,
+      'NX'
+    );
+    if (!acquired) {
+      throw new ServiceUnavailableException(
+        'The update is already being processed'
+      );
     }
 
-    if (update.message) {
-      await this._handleMessage(update.message);
+    try {
+      if (update.callback_query) {
+        await this._handleCallback(update.callback_query);
+      } else if (update.message) {
+        await this._handleMessage(update.message);
+      }
+      await ioRedis.set(doneKey, '1', 'EX', 86400);
+    } finally {
+      await ioRedis.del(processingKey).catch((): undefined => undefined);
     }
   }
 
@@ -359,7 +386,7 @@ export class TelegramAssistantService
   }
 
   private async _handleMessage(message: TelegramMessage) {
-    if (message.chat.type !== 'private' || !message.from) {
+    if (!message.chat || message.chat.type !== 'private' || !message.from) {
       return;
     }
 
@@ -477,16 +504,24 @@ export class TelegramAssistantService
     let promptText = rawText;
     if (Array.isArray(message.photo) && message.photo.length > 0) {
       const bestPhoto = message.photo[message.photo.length - 1];
-      const savedMedia = await this._downloadTelegramPhoto(
-        bestPhoto.file_id,
-        auth.link.organizationId,
-        bestPhoto.file_size
-      );
-      if (savedMedia) {
+      try {
+        const savedMedia = await this._downloadTelegramPhoto(
+          bestPhoto.file_id,
+          auth.link.organizationId,
+          bestPhoto.file_size
+        );
+        if (!savedMedia) {
+          await this._sendMessage(chatId, PHOTO_ERROR);
+          return;
+        }
         const mediaBlock = `[--Media--]\nImage: ${savedMedia.path} (media ${savedMedia.id})\n[--Media--]`;
         promptText = promptText
           ? `${mediaBlock}\n\n${promptText}`
           : `${mediaBlock}\n\nDescribe this image`;
+      } catch (error) {
+        this._logger.warn(`Failed to read Telegram photo: ${error}`);
+        await this._sendMessage(chatId, PHOTO_ERROR);
+        return;
       }
     }
 
