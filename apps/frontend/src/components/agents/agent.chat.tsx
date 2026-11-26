@@ -172,6 +172,7 @@ const LoadMessages: FC<{
     const alreadyEmpty =
       appliedId.current === pending.id && pending.messages.length === 0;
     if (!alreadyEmpty) {
+      setMessagesRef.current([]);
       setMessagesRef.current(pending.messages);
     }
     appliedId.current = pending.id;
@@ -194,6 +195,7 @@ const LoadMessages: FC<{
 
       const data = await response.json();
       interface RawMessageItem {
+        id?: string;
         content: {
           content?: string;
           parts?: Array<{ type: string; text?: string }>;
@@ -203,7 +205,7 @@ const LoadMessages: FC<{
       const list: AgentMessage[] = (
         (data.messages as RawMessageItem[]) || []
       ).map((p) => ({
-        id: makeId(12),
+        id: p.id || makeId(12),
         content:
           p.content.content ||
           (p.content.parts || [])
