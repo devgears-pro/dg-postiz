@@ -31,6 +31,7 @@ import { Integrations } from '@gitroom/frontend/components/launches/calendar.con
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { EventEmitter } from 'events';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import {
@@ -322,6 +323,8 @@ export const Agent: FC<{ children: ReactNode }> = ({ children }) => {
 
 type Thread = ThreadSummary;
 
+export const chatResetEmitter = new EventEmitter();
+
 let titlePollingUntil = Date.now() + TITLE_POLL_WINDOW_MS;
 
 export const pollThreadTitles = () => {
@@ -408,7 +411,7 @@ const Threads: FC = () => {
       if (thread.id === id) {
         router.push('/agents/new');
       } else if (thread.id === activeNewId) {
-        window.location.assign('/agents/new');
+        chatResetEmitter.emit('reset');
       }
       toaster.show(t('chat_deleted', 'Chat deleted'), 'success');
     } catch {

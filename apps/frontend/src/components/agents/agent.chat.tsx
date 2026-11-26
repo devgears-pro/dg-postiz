@@ -23,6 +23,7 @@ import {
   useCopilotChatInternal,
 } from '@copilotkit/react-core';
 import {
+  chatResetEmitter,
   MediaPortal,
   pollThreadTitles,
   PropertiesContext,
@@ -232,6 +233,24 @@ const LoadMessages: FC<{
     const timer = setTimeout(() => onLoadingChange(false), 10_000);
     return () => clearTimeout(timer);
   }, [id, onLoadingChange]);
+
+  useEffect(() => {
+    const reset = () => {
+      if (agentRef.current) {
+        agentRef.current.threadId = makeId(21);
+      }
+      agentRef.current?.setMessages([]);
+      currentId.current = 'new';
+      appliedId.current = null;
+      loaded.current = { id: 'new', messages: [] };
+      onLoadingChange(false);
+    };
+
+    chatResetEmitter.on('reset', reset);
+    return () => {
+      chatResetEmitter.off('reset', reset);
+    };
+  }, [onLoadingChange]);
 
   // CopilotKit resolves loadAgentState to an empty list for Mastra local agents
   // and can clobber the messages we hold, depending on which request resolves last
