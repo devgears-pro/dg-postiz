@@ -19,6 +19,7 @@ import { PostValidationExceptionFilter } from '@gitroom/backend/api/routes/posts
 import { HttpExceptionFilter } from '@gitroom/nestjs-libraries/services/exception.filter';
 import { ConfigurationChecker } from '@gitroom/helpers/configuration/configuration.checker';
 import { startMcp } from '@gitroom/nestjs-libraries/chat/start.mcp';
+import { shouldCompress } from './compression.filter';
 
 async function start() {
   const app = await NestFactory.create(AppModule, {
@@ -72,7 +73,7 @@ async function start() {
   });
 
   app.use(cookieParser());
-  app.use(compression());
+  app.use(compression({ filter: shouldCompress }));
   app.useGlobalFilters(new SubscriptionExceptionFilter());
   app.useGlobalFilters(new PostValidationExceptionFilter());
   app.useGlobalFilters(new HttpExceptionFilter());
