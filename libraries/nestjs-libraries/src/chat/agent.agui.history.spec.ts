@@ -18,6 +18,7 @@ vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', async () => {
 });
 
 import { AGENT_MEMORY_OPTIONS } from './load.tools.service';
+import { AgentHistoryProcessor } from './agent.history.processor';
 
 const usage = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
 
@@ -102,6 +103,8 @@ describe('AG-UI assistant history', () => {
         ...AGENT_MEMORY_OPTIONS,
       },
     });
+    const memoryStore = await memory.storage.getStore('memory');
+    if (!memoryStore) throw new Error('memory store is unavailable');
     const agent = new Agent({
       id: 'postiz',
       name: 'postiz',
@@ -109,6 +112,7 @@ describe('AG-UI assistant history', () => {
       model,
       tools: { echo: echoTool },
       defaultOptions: { maxSteps: 5 },
+      inputProcessors: [new AgentHistoryProcessor(memoryStore)],
       memory,
     });
     const adapter = MastraAgent.getLocalAgent({

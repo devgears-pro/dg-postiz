@@ -16,6 +16,7 @@ describe('LoadToolsService agent', () => {
     const ids = await agent.getConfiguredProcessorIds();
 
     expect(ids.inputProcessorIds).toContain('agent-time');
+    expect(ids.inputProcessorIds).toContain('message-history');
   });
 
   it('delivers working memory as a state signal', async () => {

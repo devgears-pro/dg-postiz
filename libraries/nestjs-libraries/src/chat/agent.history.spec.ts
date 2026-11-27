@@ -1,7 +1,8 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList, type MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { Memory } from '@mastra/memory';
+import { RequestContext } from '@mastra/core/di';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', async () => {
@@ -10,6 +11,7 @@ vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', async () => {
 });
 
 import { AGENT_MEMORY_OPTIONS } from './load.tools.service';
+import { AgentHistoryProcessor } from './agent.history.processor';
 
 const createModel = () =>
   new MastraLanguageModelV2Mock({
@@ -67,5 +69,66 @@ describe('agent dialog history', () => {
     expect(prompts[0][0]).toEqual(prompts[7][0]);
     expect(prompts[7].slice(0, prompts[0].length)).toEqual(prompts[0]);
     expect(first).toContain('message 0');
+  });
+
+  it('keeps the stored assistant text when the input repeats the same message id', async () => {
+    const store = new InMemoryStore();
+    const memoryStore = await store.getStore('memory');
+    if (!memoryStore) throw new Error('memory store is unavailable');
+    const threadId = 'thread-dedup';
+    const resourceId = 'org-1';
+    await memoryStore.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: '',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const toolPart = {
+      type: 'tool-invocation' as const,
+      toolInvocation: {
+        state: 'result' as const,
+        toolCallId: 'call-1',
+        toolName: 'echo',
+        args: { value: 'hello' },
+        result: { echoed: 'hello' },
+      },
+    };
+    const stored: MastraDBMessage = {
+      id: 'msg-1',
+      role: 'assistant',
+      createdAt: new Date('2026-11-27T18:00:00Z'),
+      threadId,
+      resourceId,
+      type: 'v2',
+      content: {
+        format: 2,
+        parts: [toolPart, { type: 'text', text: 'final answer' }],
+      },
+    };
+    await memoryStore.saveMessages({ messages: [stored] });
+    const history = new AgentHistoryProcessor(memoryStore);
+    const list = new MessageList();
+    list.add(
+      {
+        ...stored,
+        content: { format: 2, parts: [toolPart] },
+      },
+      'input'
+    );
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: threadId },
+      resourceId,
+    });
+
+    await history.processInput({ messageList: list, requestContext });
+
+    const prompt = JSON.stringify(list.get.all.db());
+
+    expect(prompt).toContain('final answer');
   });
 });

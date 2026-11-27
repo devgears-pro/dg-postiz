@@ -21,6 +21,7 @@ import {
   renderAgentInstructions,
 } from '@gitroom/nestjs-libraries/chat/agent.prompt';
 import { AgentTimeProcessor } from '@gitroom/nestjs-libraries/chat/agent.time.processor';
+import { AgentHistoryProcessor } from '@gitroom/nestjs-libraries/chat/agent.history.processor';
 import { buildPromptTracingOptions } from '@gitroom/nestjs-libraries/chat/agent.observability';
 import type { ResolvedPrompt } from '@gitroom/nestjs-libraries/chat/langfuse.prompt.service';
 
@@ -106,6 +107,40 @@ export class LoadToolsService {
   }
 
   async agent() {
+    const memory = new Memory({
+      storage: pStore,
+      options: {
+        generateTitle: {
+          model: (({
+            requestContext,
+          }: {
+            requestContext?: RequestContext<Record<string, unknown>>;
+          }) => resolveTitleModel(requestContext)) as never,
+          instructions: async ({
+            requestContext,
+          }: {
+            requestContext?: RequestContext<unknown>;
+          }) => {
+            const titlePrompt = requestContext?.getRaw('agentTitlePrompt') as
+              | ResolvedPrompt
+              | undefined;
+            if (titlePrompt?.text) return titlePrompt.text;
+            if (!requestContext) return DEFAULT_TITLE_INSTRUCTIONS;
+            const prepared = await this._runtime().ensurePrepared(
+              requestContext as unknown as AgentRequestContext
+            );
+            return prepared.titlePrompt?.text ?? DEFAULT_TITLE_INSTRUCTIONS;
+          },
+        },
+        workingMemory: AGENT_WORKING_MEMORY,
+        ...AGENT_MEMORY_OPTIONS,
+      },
+    });
+    const memoryStore = await memory.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new Error('Mastra memory storage is unavailable');
+    }
+
     return new Agent({
       id: 'postiz',
       name: 'postiz',
@@ -119,7 +154,10 @@ export class LoadToolsService {
           client: String(requestContext.get('client') || ''),
         });
       },
-      inputProcessors: [new AgentTimeProcessor()],
+      inputProcessors: [
+        new AgentHistoryProcessor(memoryStore),
+        new AgentTimeProcessor(),
+      ],
       model: async ({ requestContext }) => {
         const prepared = await this._runtime().ensurePrepared(requestContext);
         return prepared.model as never;
@@ -154,35 +192,7 @@ export class LoadToolsService {
             : {}),
         } as never;
       },
-      memory: new Memory({
-        storage: pStore,
-        options: {
-          generateTitle: {
-            model: (({
-              requestContext,
-            }: {
-              requestContext?: RequestContext<Record<string, unknown>>;
-            }) => resolveTitleModel(requestContext)) as never,
-            instructions: async ({
-              requestContext,
-            }: {
-              requestContext?: RequestContext<unknown>;
-            }) => {
-              const titlePrompt = requestContext?.getRaw('agentTitlePrompt') as
-                | ResolvedPrompt
-                | undefined;
-              if (titlePrompt?.text) return titlePrompt.text;
-              if (!requestContext) return DEFAULT_TITLE_INSTRUCTIONS;
-              const prepared = await this._runtime().ensurePrepared(
-                requestContext as unknown as AgentRequestContext
-              );
-              return prepared.titlePrompt?.text ?? DEFAULT_TITLE_INSTRUCTIONS;
-            },
-          },
-          workingMemory: AGENT_WORKING_MEMORY,
-          ...AGENT_MEMORY_OPTIONS,
-        },
-      }),
+      memory,
     });
   }
 
