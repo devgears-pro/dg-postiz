@@ -42,6 +42,7 @@ export class AgentHistoryProcessor implements Processor<'message-history'> {
       const input = inputById.get(message.id);
       if (input) {
         input.content = message.content;
+        input.createdAt = message.createdAt;
       } else {
         messageList.add(message, 'memory');
       }

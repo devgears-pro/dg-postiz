@@ -115,6 +115,7 @@ describe('agent dialog history', () => {
     list.add(
       {
         ...stored,
+        createdAt: new Date('2026-11-27T19:00:00Z'),
         content: { format: 2, parts: [toolPart] },
       },
       'input'
@@ -127,8 +128,10 @@ describe('agent dialog history', () => {
 
     await history.processInput({ messageList: list, requestContext });
 
-    const prompt = JSON.stringify(list.get.all.db());
+    const result = list.get.all.db().find((message) => message.id === 'msg-1');
+    const prompt = JSON.stringify(result);
 
     expect(prompt).toContain('final answer');
+    expect(result?.createdAt).toEqual(stored.createdAt);
   });
 });
