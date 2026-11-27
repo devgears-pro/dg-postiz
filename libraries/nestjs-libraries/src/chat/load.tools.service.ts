@@ -34,6 +34,10 @@ export const AGENT_WORKING_MEMORY = {
   useStateSignals: true,
 };
 
+export const AGENT_MEMORY_OPTIONS = {
+  lastMessages: Number.MAX_SAFE_INTEGER,
+};
+
 type TitleModelContext = {
   get: (key: string) => unknown;
 };
@@ -176,6 +180,7 @@ export class LoadToolsService {
             },
           },
           workingMemory: AGENT_WORKING_MEMORY,
+          ...AGENT_MEMORY_OPTIONS,
         },
       }),
     });

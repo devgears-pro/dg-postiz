@@ -9,7 +9,7 @@ vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', async () => {
 import { LoadToolsService, resolveTitleModel } from './load.tools.service';
 
 describe('LoadToolsService agent', () => {
-  it('[TC-2-27-7] registers the current-time processor', async () => {
+  it('registers the current-time processor', async () => {
     const service = new LoadToolsService({} as ModuleRef);
 
     const agent = await service.agent();
@@ -18,7 +18,7 @@ describe('LoadToolsService agent', () => {
     expect(ids.inputProcessorIds).toContain('agent-time');
   });
 
-  it('[TC-2-27-6] delivers working memory as a state signal', async () => {
+  it('delivers working memory as a state signal', async () => {
     const service = new LoadToolsService({} as ModuleRef);
 
     const agent = await service.agent();
