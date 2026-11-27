@@ -20,9 +20,9 @@ import {
   DEFAULT_TITLE_INSTRUCTIONS,
   renderAgentInstructions,
 } from '@gitroom/nestjs-libraries/chat/agent.prompt';
+import { AgentTimeProcessor } from '@gitroom/nestjs-libraries/chat/agent.time.processor';
 import { buildPromptTracingOptions } from '@gitroom/nestjs-libraries/chat/agent.observability';
 import type { ResolvedPrompt } from '@gitroom/nestjs-libraries/chat/langfuse.prompt.service';
-import dayjs from 'dayjs';
 
 export const AgentState = object({
   proverbs: array(string()).default([]),
@@ -88,11 +88,11 @@ export class LoadToolsService {
         const prepared = await this._runtime().ensurePrepared(requestContext);
         return renderAgentInstructions({
           prompt: prepared.prompt?.text ?? prepared.config.prompt,
-          date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
           ui: requestContext.get('ui') === 'true',
           client: String(requestContext.get('client') || ''),
         });
       },
+      inputProcessors: [new AgentTimeProcessor()],
       model: async ({ requestContext }) => {
         const prepared = await this._runtime().ensurePrepared(requestContext);
         return prepared.model as never;
