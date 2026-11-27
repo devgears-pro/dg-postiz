@@ -16,7 +16,7 @@ export class AgentHistoryProcessor implements Processor<'message-history'> {
     messageList,
     requestContext,
   }: ProcessInputArgs): Promise<MessageList> {
-    const memoryContext = requestContext?.get('MastraMemory') as
+    const memoryContext = requestContext?.getRaw('MastraMemory') as
       | MemoryContext
       | undefined;
     const threadId = memoryContext?.thread?.id;
