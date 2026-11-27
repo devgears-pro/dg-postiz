@@ -28,6 +28,29 @@ export const AgentState = object({
   proverbs: array(string()).default([]),
 });
 
+export const AGENT_WORKING_MEMORY = {
+  enabled: true,
+  schema: AgentState,
+  useStateSignals: true,
+};
+
+type TitleModelContext = {
+  get: (key: string) => unknown;
+};
+
+export const resolveTitleModel = (
+  requestContext: TitleModelContext | undefined,
+  env: NodeJS.ProcessEnv = process.env
+) => {
+  const prepared = requestContext?.get('agentTitleModel');
+  if (prepared) return prepared;
+
+  const configured =
+    env.POSTIZ_AI_TITLE_MODEL?.trim() || env.POSTIZ_AI_MODEL?.trim();
+
+  return openai.chat(configured || 'gpt-5.2');
+};
+
 @Injectable()
 export class LoadToolsService {
   constructor(private _moduleRef: ModuleRef) {}
@@ -135,9 +158,7 @@ export class LoadToolsService {
               requestContext,
             }: {
               requestContext?: RequestContext<Record<string, unknown>>;
-            }) =>
-              requestContext?.get('agentTitleModel') ??
-              openai.chat('gpt-5.2')) as never,
+            }) => resolveTitleModel(requestContext)) as never,
             instructions: async ({
               requestContext,
             }: {
@@ -154,10 +175,7 @@ export class LoadToolsService {
               return prepared.titlePrompt?.text ?? DEFAULT_TITLE_INSTRUCTIONS;
             },
           },
-          workingMemory: {
-            enabled: true,
-            schema: AgentState,
-          },
+          workingMemory: AGENT_WORKING_MEMORY,
         },
       }),
     });

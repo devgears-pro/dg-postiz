@@ -6,7 +6,7 @@ vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', async () => {
   return { pStore: new InMemoryStore() };
 });
 
-import { LoadToolsService } from './load.tools.service';
+import { LoadToolsService, resolveTitleModel } from './load.tools.service';
 
 describe('LoadToolsService agent', () => {
   it('[TC-14-2-2] registers the current-time processor', async () => {
@@ -16,5 +16,37 @@ describe('LoadToolsService agent', () => {
     const ids = await agent.getConfiguredProcessorIds();
 
     expect(ids.inputProcessorIds).toContain('agent-time');
+  });
+
+  it('[TC-14-5-2] delivers working memory as a state signal', async () => {
+    const service = new LoadToolsService({} as ModuleRef);
+
+    const agent = await service.agent();
+    const memory = await agent.getMemory();
+    const config = memory?.getMergedThreadConfig();
+
+    expect(config?.workingMemory?.useStateSignals).toBe(true);
+  });
+
+  it('[TC-14-6-1] resolves the title model from context, environment and fallback', () => {
+    const prepared = { modelId: 'prepared-model' };
+
+    const fromContext = resolveTitleModel(
+      { get: () => prepared },
+      { POSTIZ_AI_TITLE_MODEL: 'dg-small' }
+    );
+    const fromTitleEnv = resolveTitleModel(undefined, {
+      POSTIZ_AI_TITLE_MODEL: 'dg-small',
+      POSTIZ_AI_MODEL: 'dg-multimodal',
+    });
+    const fromMainEnv = resolveTitleModel(undefined, {
+      POSTIZ_AI_MODEL: 'dg-multimodal',
+    });
+    const fromFallback = resolveTitleModel(undefined, {});
+
+    expect(fromContext).toBe(prepared);
+    expect((fromTitleEnv as { modelId?: string }).modelId).toBe('dg-small');
+    expect((fromMainEnv as { modelId?: string }).modelId).toBe('dg-multimodal');
+    expect((fromFallback as { modelId?: string }).modelId).toBe('gpt-5.2');
   });
 });
