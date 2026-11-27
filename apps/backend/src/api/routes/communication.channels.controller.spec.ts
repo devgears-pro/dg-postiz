@@ -26,6 +26,7 @@ const LINK: CommunicationChannelLink = {
   externalChatId: '1',
   externalUsername: 'alice',
   activeThreadId: null,
+  lastActiveAt: null,
   metadata: null,
   createdAt: new Date(0),
   updatedAt: new Date(0),

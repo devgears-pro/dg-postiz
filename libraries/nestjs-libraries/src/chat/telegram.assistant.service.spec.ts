@@ -35,6 +35,7 @@ import {
   TelegramChannelsPort,
   TelegramMediaPort,
 } from './telegram.assistant.service';
+import type { IncomingSessionPolicy } from './communication.channels.service';
 
 const LINK: CommunicationChannelLink = {
   id: 'link-1',
@@ -45,6 +46,7 @@ const LINK: CommunicationChannelLink = {
   externalChatId: '1',
   externalUsername: 'alice',
   activeThreadId: null,
+  lastActiveAt: null,
   metadata: null,
   createdAt: new Date(0),
   updatedAt: new Date(0),
@@ -75,6 +77,9 @@ describe('TelegramAssistantService', () => {
     handleIncomingMessage: vi.fn<
       TelegramChannelsPort['handleIncomingMessage']
     >(),
+    touchExternalUserActivity: vi.fn<
+      TelegramChannelsPort['touchExternalUserActivity']
+    >(),
   } satisfies TelegramChannelsPort;
   const media = {
     saveFile: vi.fn<TelegramMediaPort['saveFile']>(),
@@ -87,6 +92,7 @@ describe('TelegramAssistantService', () => {
     delete process.env.TELEGRAM_ASSISTANT_POLLING;
     delete process.env.TELEGRAM_ASSISTANT_WEBHOOK_SECRET;
     delete process.env.FRONTEND_URL;
+    delete process.env.TELEGRAM_ASSISTANT_SESSION_IDLE_MINUTES;
     vi.stubEnv('NODE_ENV', 'test');
     delete process.env.NOT_SECURED;
     process.env.TELEGRAM_ASSISTANT_TOKEN = 'tg-token';
@@ -202,6 +208,10 @@ describe('TelegramAssistantService', () => {
     expect(sendCall).toBeTruthy();
     const body = JSON.parse(String(sendCall?.[1]?.body)) as { text?: string };
     expect(body.text).toMatch(/image|photo/i);
+    expect(channels.touchExternalUserActivity).toHaveBeenCalledWith(
+      'telegram',
+      '1'
+    );
     expect(channels.handleIncomingMessage).not.toHaveBeenCalled();
     expect(redisStore.has('comm:tg:upd:102:processing')).toBe(false);
     expect(redisStore.has('comm:tg:upd:102:done')).toBe(true);
@@ -354,6 +364,10 @@ describe('TelegramAssistantService', () => {
     };
     expect(body.text).toMatch(/already connected/i);
     expect(body.reply_markup).toBeUndefined();
+    expect(channels.touchExternalUserActivity).toHaveBeenCalledWith(
+      'telegram',
+      '1'
+    );
   });
 
   it('keeps the typing indicator alive until the assistant replies', async () => {
@@ -410,5 +424,112 @@ describe('TelegramAssistantService', () => {
       generatedImages: [],
     });
     await pending;
+  });
+
+  it('wires the idle policy to the configured window and the link chat', async () => {
+    channels.getAuthorizedLink.mockResolvedValue({
+      status: 'ok',
+      link: { ...LINK, externalChatId: '777' },
+    });
+    let capturedPolicy: IncomingSessionPolicy | undefined;
+    channels.handleIncomingMessage.mockImplementation(
+      async (_channel, _externalUserId, _messageText, sessionPolicy) => {
+        capturedPolicy = sessionPolicy;
+        await sessionPolicy?.onIdleReset('777');
+        return {
+          status: 'ok',
+          threadId: 'thread-1',
+          text: 'Reply',
+          generatedImages: [],
+        };
+      }
+    );
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/sendChatAction')) {
+        return jsonResponse({ ok: true, result: true });
+      }
+      if (url.endsWith('/sendMessage')) {
+        return jsonResponse({ ok: true, result: { message_id: 1 } });
+      }
+      throw new Error(`Unexpected Telegram call: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await service.processUpdate({
+      update_id: 107,
+      message: {
+        message_id: 7,
+        from: { id: 1, username: 'alice' },
+        chat: { id: 1, type: 'private' },
+        text: 'Hello',
+      },
+    });
+
+    const now = new Date('2026-01-01T12:00:00.000Z');
+    const messages = fetchMock.mock.calls
+      .filter(([url]) => String(url).endsWith('/sendMessage'))
+      .map(
+        ([, init]) =>
+          JSON.parse(String(init?.body)) as {
+            chat_id?: string | number;
+            text?: string;
+            parse_mode?: string;
+          }
+      );
+    expect(
+      capturedPolicy?.shouldReset(
+        new Date('2026-01-01T11:00:00.000Z'),
+        now
+      )
+    ).toBe(true);
+    expect(
+      capturedPolicy?.shouldReset(
+        new Date('2026-01-01T11:00:01.000Z'),
+        now
+      )
+    ).toBe(false);
+    expect(messages[0]).toEqual({
+      chat_id: '777',
+      text: '<i>New session started after inactivity.\nPrevious chats: /chats</i>',
+      parse_mode: 'HTML',
+    });
+  });
+
+  it('touches link activity on the chats command without an idle notice', async () => {
+    channels.getAuthorizedLink.mockResolvedValue({
+      status: 'ok',
+      link: LINK,
+    });
+    channels.listThreadsForExternalUser.mockResolvedValue([]);
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/sendMessage')) {
+        return jsonResponse({ ok: true, result: { message_id: 1 } });
+      }
+      throw new Error(`Unexpected Telegram call: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await service.processUpdate({
+      update_id: 108,
+      message: {
+        message_id: 8,
+        from: { id: 1, username: 'alice' },
+        chat: { id: 1, type: 'private' },
+        text: '/chats',
+      },
+    });
+
+    expect(channels.touchExternalUserActivity).toHaveBeenCalledWith(
+      'telegram',
+      '1'
+    );
+    expect(channels.handleIncomingMessage).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith('/sendMessage')
+    );
+    const body = JSON.parse(String(sendCall?.[1]?.body)) as { text?: string };
+    expect(body.text).toMatch(/no chats yet/i);
   });
 });

@@ -60,6 +60,10 @@ export function formatTelegramHtml(markdown: string): string {
   return formatted;
 }
 
+export function formatTelegramSystemNotice(text: string): string {
+  return `<i>${escapeHtml(text)}</i>`;
+}
+
 export function splitTelegramMessage(text: string, maxLength = 4096): string[] {
   if (!text) {
     return [];
