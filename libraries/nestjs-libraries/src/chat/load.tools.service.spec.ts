@@ -9,7 +9,7 @@ vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', async () => {
 import { LoadToolsService, resolveTitleModel } from './load.tools.service';
 
 describe('LoadToolsService agent', () => {
-  it('[TC-14-2-2] registers the current-time processor', async () => {
+  it('[TC-2-27-7] registers the current-time processor', async () => {
     const service = new LoadToolsService({} as ModuleRef);
 
     const agent = await service.agent();
@@ -18,7 +18,7 @@ describe('LoadToolsService agent', () => {
     expect(ids.inputProcessorIds).toContain('agent-time');
   });
 
-  it('[TC-14-5-2] delivers working memory as a state signal', async () => {
+  it('[TC-2-27-6] delivers working memory as a state signal', async () => {
     const service = new LoadToolsService({} as ModuleRef);
 
     const agent = await service.agent();
@@ -28,7 +28,7 @@ describe('LoadToolsService agent', () => {
     expect(config?.workingMemory?.useStateSignals).toBe(true);
   });
 
-  it('[TC-14-6-1] resolves the title model from context, environment and fallback', () => {
+  it('[TC-2-21-4] resolves the title model from context, environment and fallback', () => {
     const prepared = { modelId: 'prepared-model' };
 
     const fromContext = resolveTitleModel(

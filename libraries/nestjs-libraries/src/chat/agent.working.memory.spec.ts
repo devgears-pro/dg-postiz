@@ -27,7 +27,7 @@ const createModel = () =>
   });
 
 describe('working memory delivery', () => {
-  it('[TC-14-5-1] keeps the system prompt stable when working memory changes', async () => {
+  it('[TC-2-27-5] keeps the system prompt stable when working memory changes', async () => {
     const model = createModel();
     const memory = new Memory({
       storage: new InMemoryStore(),

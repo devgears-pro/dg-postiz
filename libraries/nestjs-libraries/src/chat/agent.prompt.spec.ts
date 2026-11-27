@@ -12,7 +12,7 @@ describe('renderAgentInstructions', () => {
     vi.useRealTimers();
   });
 
-  it('[TC-14-1-1] keeps the system prompt identical at different times', () => {
+  it('[TC-2-27-1] keeps the system prompt identical at different times', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-26T23:59:59Z'));
     const first = renderAgentInstructions(base);

@@ -43,7 +43,7 @@ describe('AgentTimeProcessor turns', () => {
     vi.useRealTimers();
   });
 
-  it('[TC-14-4-1] keeps the prompt prefix stable and refreshes time after a pause', async () => {
+  it('[TC-2-27-4] keeps the prompt prefix stable and refreshes time after a pause', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-11-26T21:34:56Z'));
     const model = createModel();

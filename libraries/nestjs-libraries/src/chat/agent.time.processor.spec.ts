@@ -18,7 +18,7 @@ describe('AgentTimeProcessor', () => {
     vi.useRealTimers();
   });
 
-  it('[TC-14-2-1] adds a transient current-time reminder to the model input', async () => {
+  it('[TC-2-27-2] adds a transient current-time reminder to the model input', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-26T21:34:56Z'));
     const messageList = new MessageList();
@@ -47,7 +47,7 @@ describe('AgentTimeProcessor', () => {
     expect(metadata?.signal?.transient).toBe(true);
   });
 
-  it('[TC-14-3-1] sends no additional time signal after the first step', async () => {
+  it('[TC-2-27-3] sends no additional time signal after the first step', async () => {
     const sendSignal = vi.fn().mockResolvedValue(undefined);
 
     await processor.processInputStep(buildArgs(1, sendSignal));
