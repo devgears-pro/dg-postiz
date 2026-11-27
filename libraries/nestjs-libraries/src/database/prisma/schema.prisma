@@ -1870,6 +1870,7 @@ model CommunicationChannelLink {
   externalChatId   String
   externalUsername String?
   activeThreadId   String?
+  lastActiveAt     DateTime?
   metadata         Json?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt

@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -57,8 +58,10 @@ export type CommunicationChannelsRepositoryPort = {
   ): Promise<CommunicationChannelLink>;
   updateActiveThread(
     id: string,
-    activeThreadId: string | null
+    activeThreadId: string | null,
+    lastActiveAt: Date
   ): Promise<CommunicationChannelLink>;
+  touchActivity(id: string, at: Date): Promise<void>;
   deleteByUserAndOrg(
     userId: string,
     organizationId: string,
@@ -125,6 +128,11 @@ type ExternalConnectPayload = {
 export type GeneratedMediaAttachment = {
   id: string;
   path: string;
+};
+
+export type IncomingSessionPolicy = {
+  shouldReset: (lastActiveAt: Date | null, now: Date) => boolean;
+  onIdleReset: (linkedChatId: string) => Promise<void>;
 };
 
 export type IncomingChannelResult =
@@ -200,6 +208,8 @@ function extractGeneratedImages(steps: unknown): GeneratedMediaAttachment[] {
 
 @Injectable()
 export class CommunicationChannelsService {
+  private readonly _logger = new Logger(CommunicationChannelsService.name);
+
   constructor(
     @Inject(CommunicationChannelsRepository)
     private _repository: CommunicationChannelsRepositoryPort,
@@ -479,7 +489,11 @@ export class CommunicationChannelsService {
       await assertThreadAccess(memory, auth.link.organizationId, threadId);
       await assertThreadExists(memory, auth.link.organizationId, threadId);
       const thread = await memory.getThreadById({ threadId });
-      await this._repository.updateActiveThread(auth.link.id, threadId);
+      await this._repository.updateActiveThread(
+        auth.link.id,
+        threadId,
+        new Date()
+      );
       return { ok: true, title: thread?.title || 'Chat' };
     } catch (error) {
       if (
@@ -500,14 +514,29 @@ export class CommunicationChannelsService {
     if (auth.status !== 'ok') {
       return false;
     }
-    await this._repository.updateActiveThread(auth.link.id, null);
+    await this._repository.updateActiveThread(auth.link.id, null, new Date());
     return true;
+  }
+
+  async touchExternalUserActivity(
+    channel: string,
+    externalUserId: string
+  ): Promise<void> {
+    const link = await this._repository.findByExternalUser(
+      channel,
+      externalUserId
+    );
+    if (!link) {
+      return;
+    }
+    await this._repository.touchActivity(link.id, new Date());
   }
 
   async handleIncomingMessage(
     channel: string,
     externalUserId: string,
-    messageText: string
+    messageText: string,
+    sessionPolicy?: IncomingSessionPolicy
   ): Promise<IncomingChannelResult> {
     const auth = await this.getAuthorizedLink(channel, externalUserId);
     if (auth.status !== 'ok') {
@@ -530,11 +559,46 @@ export class CommunicationChannelsService {
     let prepared: Awaited<ReturnType<AgentRuntimePort['prepare']>> | null =
       null;
     try {
+      const freshLink = await this._repository.findByExternalUser(
+        channel,
+        externalUserId
+      );
+      if (!freshLink) {
+        return { status: 'unlinked' };
+      }
+      if (
+        freshLink.userId !== auth.link.userId ||
+        freshLink.organizationId !== auth.link.organizationId
+      ) {
+        return { status: 'unauthorized' };
+      }
+
       const mastra = await this._mastraService.mastra();
       const agent = mastra.getAgent('postiz');
       const memory = await loadThreadMemory(() => agent.getMemory());
 
-      let threadId = auth.link.activeThreadId;
+      const now = new Date();
+      let threadId = freshLink.activeThreadId;
+      if (sessionPolicy && threadId) {
+        if (sessionPolicy.shouldReset(freshLink.lastActiveAt, now)) {
+          await this._repository.updateActiveThread(
+            freshLink.id,
+            null,
+            new Date()
+          );
+          threadId = null;
+          try {
+            await sessionPolicy.onIdleReset(freshLink.externalChatId);
+          } catch (error) {
+            this._logger.warn(`Idle session notice failed: ${error}`);
+          }
+        } else {
+          await this._repository.touchActivity(freshLink.id, new Date());
+        }
+      } else if (sessionPolicy) {
+        await this._repository.touchActivity(freshLink.id, new Date());
+      }
+
       if (threadId) {
         if (!memory) {
           throw new ServiceUnavailableException(
@@ -542,8 +606,16 @@ export class CommunicationChannelsService {
           );
         }
         try {
-          await assertThreadAccess(memory, auth.link.organizationId, threadId);
-          await assertThreadExists(memory, auth.link.organizationId, threadId);
+          await assertThreadAccess(
+            memory,
+            freshLink.organizationId,
+            threadId
+          );
+          await assertThreadExists(
+            memory,
+            freshLink.organizationId,
+            threadId
+          );
         } catch {
           threadId = null;
         }
@@ -551,10 +623,14 @@ export class CommunicationChannelsService {
 
       if (!threadId) {
         threadId = randomUUID();
-        await this._repository.updateActiveThread(auth.link.id, threadId);
+        await this._repository.updateActiveThread(
+          freshLink.id,
+          threadId,
+          new Date()
+        );
       }
 
-      prepared = await this._agentRuntime.prepare(auth.link.organizationId, {
+      prepared = await this._agentRuntime.prepare(freshLink.organizationId, {
         ui: false,
         external: false,
       });
@@ -566,7 +642,7 @@ export class CommunicationChannelsService {
               ? [{ role: auth.membership.role }]
               : [],
           }
-        : { id: auth.link.organizationId };
+        : { id: freshLink.organizationId };
 
       const requestContext = new RequestContext();
       requestContext.setRaw('ui', 'false');
@@ -576,16 +652,16 @@ export class CommunicationChannelsService {
         JSON.stringify(organizationPayload)
       );
       applyTraceIdentity(requestContext, {
-        organizationId: auth.link.organizationId,
+        organizationId: freshLink.organizationId,
         threadId,
-        userId: auth.link.userId,
+        userId: freshLink.userId,
       });
       prepared.applyTo(requestContext);
 
       const stream = await agent.stream(messageText, {
         memory: {
           thread: threadId,
-          resource: auth.link.organizationId,
+          resource: freshLink.organizationId,
         },
         requestContext,
       });

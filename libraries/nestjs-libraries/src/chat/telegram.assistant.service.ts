@@ -8,11 +8,19 @@ import {
 } from '@nestjs/common';
 import { readFile } from 'fs/promises';
 import { resolve, sep } from 'path';
-import { CommunicationChannelsService } from '@gitroom/nestjs-libraries/chat/communication.channels.service';
+import {
+  CommunicationChannelsService,
+  IncomingSessionPolicy,
+} from '@gitroom/nestjs-libraries/chat/communication.channels.service';
 import {
   formatTelegramHtml,
+  formatTelegramSystemNotice,
   splitTelegramMessage,
 } from '@gitroom/nestjs-libraries/chat/telegram.assistant.format';
+import {
+  parseTelegramIdleMinutes,
+  shouldResetIdleSession,
+} from '@gitroom/nestjs-libraries/chat/telegram.assistant.session';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { uploadStreamToStorage } from '@gitroom/nestjs-libraries/upload/custom.upload.validation';
@@ -20,6 +28,10 @@ import { MediaService } from '@gitroom/nestjs-libraries/database/prisma/media/me
 
 const PHOTO_ERROR =
   'Could not read the image. Send a JPEG or PNG up to 10 MB.';
+
+const IDLE_NOTICE = formatTelegramSystemNotice(
+  'New session started after inactivity.\nPrevious chats: /chats'
+);
 
 export type TelegramPhotoSize = {
   file_id: string;
@@ -76,6 +88,7 @@ export type TelegramChannelsPort = Pick<
   | 'selectThreadForExternalUser'
   | 'startNewThreadForExternalUser'
   | 'handleIncomingMessage'
+  | 'touchExternalUserActivity'
 >;
 
 export type TelegramMediaPort = Pick<MediaService, 'saveFile'>;
@@ -85,6 +98,9 @@ export class TelegramAssistantService
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly _logger = new Logger(TelegramAssistantService.name);
+  private readonly _sessionIdleMinutes = parseTelegramIdleMinutes(
+    process.env.TELEGRAM_ASSISTANT_SESSION_IDLE_MINUTES
+  );
   private _pollingActive = false;
   private _pollingOffset = 0;
 
@@ -533,6 +549,22 @@ export class TelegramAssistantService
     });
   }
 
+  private _sessionPolicy(): IncomingSessionPolicy {
+    return {
+      shouldReset: (lastActiveAt, now) =>
+        shouldResetIdleSession(
+          lastActiveAt,
+          now,
+          this._sessionIdleMinutes * 60_000
+        ),
+      onIdleReset: async (linkedChatId) => {
+        await this._sendMessage(linkedChatId, IDLE_NOTICE, {
+          parseMode: 'HTML',
+        });
+      },
+    };
+  }
+
   private async _handleMessage(message: TelegramMessage) {
     if (!message.chat || message.chat.type !== 'private' || !message.from) {
       return;
@@ -555,6 +587,10 @@ export class TelegramAssistantService
           }
         );
         if (linked) {
+          await this._channelsService.touchExternalUserActivity(
+            'telegram',
+            externalUserId
+          );
           await this._sendMessage(
             chatId,
             'Telegram is connected to your Postiz workspace. Send a message to start chatting with the assistant.'
@@ -573,6 +609,10 @@ export class TelegramAssistantService
         externalUserId
       );
       if (auth.status === 'ok') {
+        await this._channelsService.touchExternalUserActivity(
+          'telegram',
+          externalUserId
+        );
         await this._sendMessage(
           chatId,
           'Telegram is already connected. Send a message to chat with the assistant.'
@@ -633,6 +673,10 @@ export class TelegramAssistantService
         );
         return;
       }
+      await this._channelsService.touchExternalUserActivity(
+        'telegram',
+        externalUserId
+      );
       const threads = await this._channelsService.listThreadsForExternalUser(
         'telegram',
         externalUserId
@@ -687,6 +731,10 @@ export class TelegramAssistantService
           bestPhoto.file_size
         );
         if (!savedMedia) {
+          await this._channelsService.touchExternalUserActivity(
+            'telegram',
+            externalUserId
+          );
           await this._sendMessage(chatId, PHOTO_ERROR);
           return;
         }
@@ -696,6 +744,10 @@ export class TelegramAssistantService
           : `${mediaBlock}\n\nDescribe this image`;
       } catch (error) {
         this._logger.warn(`Failed to read Telegram photo: ${error}`);
+        await this._channelsService.touchExternalUserActivity(
+          'telegram',
+          externalUserId
+        );
         await this._sendMessage(chatId, PHOTO_ERROR);
         return;
       }
@@ -723,7 +775,8 @@ export class TelegramAssistantService
       result = await this._channelsService.handleIncomingMessage(
         'telegram',
         externalUserId,
-        promptText
+        promptText,
+        this._sessionPolicy()
       );
     } catch (error) {
       this._logger.warn(`Assistant reply failed: ${error}`);

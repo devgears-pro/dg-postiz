@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 const redisStore = new Map<string, string>();
@@ -34,10 +34,12 @@ import {
   AgentRuntimePort,
   CommunicationChannelsRepositoryPort,
   CommunicationChannelsService,
+  IncomingSessionPolicy,
   MastraPort,
   MembershipPort,
   SubscriptionPort,
 } from './communication.channels.service';
+import { shouldResetIdleSession } from './telegram.assistant.session';
 
 const LINK: CommunicationChannelLink = {
   id: 'link-1',
@@ -48,6 +50,7 @@ const LINK: CommunicationChannelLink = {
   externalChatId: '123',
   externalUsername: 'alice',
   activeThreadId: null,
+  lastActiveAt: null,
   metadata: null,
   createdAt: new Date(0),
   updatedAt: new Date(0),
@@ -76,6 +79,9 @@ describe('CommunicationChannelsService', () => {
     upsertLink: vi.fn<CommunicationChannelsRepositoryPort['upsertLink']>(),
     updateActiveThread: vi.fn<
       CommunicationChannelsRepositoryPort['updateActiveThread']
+    >(),
+    touchActivity: vi.fn<
+      CommunicationChannelsRepositoryPort['touchActivity']
     >(),
     deleteByUserAndOrg: vi.fn<
       CommunicationChannelsRepositoryPort['deleteByUserAndOrg']
@@ -115,6 +121,10 @@ describe('CommunicationChannelsService', () => {
       mastraService,
       agentRuntime
     );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('creates one-time connect link and rejects second consumption', async () => {
@@ -259,6 +269,7 @@ describe('CommunicationChannelsService', () => {
       externalChatId: '555',
       externalUsername: 'bob',
       activeThreadId: null,
+      lastActiveAt: null,
       metadata: null,
       createdAt: new Date(0),
       updatedAt: new Date(0),
@@ -283,6 +294,7 @@ describe('CommunicationChannelsService', () => {
       externalChatId: '555',
       externalUsername: 'bob',
       activeThreadId: 'thread-1',
+      lastActiveAt: null,
       metadata: null,
       createdAt: new Date(0),
       updatedAt: new Date(0),
@@ -321,4 +333,364 @@ describe('CommunicationChannelsService', () => {
     expect(res.status).toBe('ok');
     expect(streamMock).toHaveBeenCalledTimes(1);
   });
+
+  function memoryStub(threadId: string) {
+    return {
+      getThreadById: vi.fn(async (args: { threadId: string }) => ({
+        id: args.threadId,
+        resourceId: 'org-1',
+      })),
+    };
+  }
+
+  function stubAssistantReply(memory?: {
+    getThreadById: (args: { threadId: string }) => Promise<{
+      id: string;
+      resourceId: string;
+    }>;
+  }) {
+    const streamMock = vi.fn<
+      (
+        message: string,
+        options: unknown
+      ) => Promise<{ text: Promise<string>; steps: Promise<unknown> }>
+    >(async () => ({
+      text: Promise.resolve('ok'),
+      steps: Promise.resolve([]),
+    }));
+    mastraService.mastra.mockResolvedValue({
+      getAgent: () => ({
+        getMemory: async () => memory,
+        stream: streamMock,
+      }),
+    });
+    agentRuntime.prepare.mockResolvedValue({
+      applyTo: () => undefined,
+      release: async () => undefined,
+    });
+    return streamMock;
+  }
+
+  function sessionPolicy(
+    onIdleReset: (linkedChatId: string) => Promise<void>
+  ): IncomingSessionPolicy {
+    return {
+      shouldReset: (lastActiveAt, now) =>
+        shouldResetIdleSession(lastActiveAt, now, 60 * 60_000),
+      onIdleReset,
+    };
+  }
+
+  it('[TC-13-7-3] starts a new session exactly at the idle threshold', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-01-01T12:00:00.000Z');
+    vi.setSystemTime(now);
+    repository.findByExternalUser.mockResolvedValue({
+      ...LINK,
+      externalUserId: '555',
+      externalChatId: 'chat-555',
+      externalUsername: 'bob',
+      activeThreadId: 'thread-old',
+      lastActiveAt: new Date(now.getTime() - 60 * 60_000),
+    });
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
+    repository.updateActiveThread.mockResolvedValue({
+      ...LINK,
+      activeThreadId: null,
+    });
+    const streamMock = stubAssistantReply(memoryStub('thread-new'));
+    const onIdleReset = vi.fn(async () => undefined);
+
+    const res = await service.handleIncomingMessage(
+      'telegram',
+      '555',
+      'hello',
+      sessionPolicy(onIdleReset)
+    );
+
+    expect(res.status).toBe('ok');
+    expect(repository.updateActiveThread).toHaveBeenNthCalledWith(
+      1,
+      'link-1',
+      null,
+      expect.any(Date)
+    );
+    expect(onIdleReset).toHaveBeenCalledWith('chat-555');
+    expect(onIdleReset.mock.invocationCallOrder[0]).toBeLessThan(
+      streamMock.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('[TC-13-7-4] keeps the session just before the idle threshold', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-01-01T12:00:00.000Z');
+    vi.setSystemTime(now);
+    repository.findByExternalUser.mockResolvedValue({
+      ...LINK,
+      externalUserId: '555',
+      externalChatId: 'chat-555',
+      externalUsername: 'bob',
+      activeThreadId: 'thread-old',
+      lastActiveAt: new Date(now.getTime() - (60 * 60_000 - 1_000)),
+    });
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
+    repository.updateActiveThread.mockResolvedValue({
+      ...LINK,
+      activeThreadId: 'thread-old',
+    });
+    const streamMock = stubAssistantReply(memoryStub('thread-old'));
+    const onIdleReset = vi.fn(async () => undefined);
+
+    const res = await service.handleIncomingMessage(
+      'telegram',
+      '555',
+      'hello',
+      sessionPolicy(onIdleReset)
+    );
+
+    expect(res.status).toBe('ok');
+    expect(onIdleReset).not.toHaveBeenCalled();
+    expect(repository.updateActiveThread).not.toHaveBeenCalled();
+    expect(repository.touchActivity).toHaveBeenCalledWith(
+      'link-1',
+      expect.any(Date)
+    );
+    expect(streamMock).toHaveBeenCalledWith(
+      'hello',
+      expect.objectContaining({
+        memory: { thread: 'thread-old', resource: 'org-1' },
+      })
+    );
+  });
+
+  it('awaits the idle session notice before starting the agent stream', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-01-01T12:00:00.000Z');
+    vi.setSystemTime(now);
+    repository.findByExternalUser.mockResolvedValue({
+      ...LINK,
+      externalUserId: '555',
+      externalChatId: 'chat-555',
+      externalUsername: 'bob',
+      activeThreadId: 'thread-old',
+      lastActiveAt: new Date(now.getTime() - 60 * 60_000),
+    });
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
+    repository.updateActiveThread.mockResolvedValue({
+      ...LINK,
+      activeThreadId: null,
+    });
+    const streamMock = stubAssistantReply(memoryStub('thread-new'));
+    let release!: () => void;
+    const onIdleReset = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
+
+    const pending = service.handleIncomingMessage(
+      'telegram',
+      '555',
+      'hello',
+      sessionPolicy(onIdleReset)
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(streamMock).not.toHaveBeenCalled();
+
+    release();
+    await pending;
+
+    expect(streamMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps replying when the idle session notice fails', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T12:00:00.000Z'));
+    repository.findByExternalUser.mockResolvedValue({
+      ...LINK,
+      externalUserId: '555',
+      externalChatId: '555',
+      externalUsername: 'bob',
+      activeThreadId: 'thread-old',
+      lastActiveAt: new Date('2026-01-01T10:00:00.000Z'),
+    });
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
+    repository.updateActiveThread.mockResolvedValue({
+      ...LINK,
+      activeThreadId: null,
+      lastActiveAt: new Date('2026-01-01T12:00:00.000Z'),
+    });
+    const streamMock = stubAssistantReply();
+    const onIdleReset = vi.fn(async () => {
+      throw new Error('telegram unavailable');
+    });
+
+    const res = await service.handleIncomingMessage(
+      'telegram',
+      '555',
+      'hello',
+      sessionPolicy(onIdleReset)
+    );
+
+    expect(res.status).toBe('ok');
+    expect(streamMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('touches activity and keeps streaming the fresh thread', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-01-01T12:00:00.000Z');
+    vi.setSystemTime(now);
+    repository.findByExternalUser.mockResolvedValue({
+      ...LINK,
+      externalUserId: '555',
+      externalChatId: '555',
+      externalUsername: 'bob',
+      activeThreadId: 'thread-old',
+      lastActiveAt: new Date(now.getTime() - 30 * 60_000),
+    });
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
+    repository.updateActiveThread.mockResolvedValue({
+      ...LINK,
+      activeThreadId: 'thread-old',
+    });
+    const streamMock = stubAssistantReply(memoryStub('thread-old'));
+    const onIdleReset = vi.fn(async () => undefined);
+
+    await service.handleIncomingMessage(
+      'telegram',
+      '555',
+      'hello',
+      sessionPolicy(onIdleReset)
+    );
+
+    expect(repository.touchActivity).toHaveBeenCalledWith(
+      'link-1',
+      expect.any(Date)
+    );
+    expect(repository.updateActiveThread).not.toHaveBeenCalled();
+    expect(onIdleReset).not.toHaveBeenCalled();
+    expect(streamMock).toHaveBeenCalledWith(
+      'hello',
+      expect.objectContaining({
+        memory: { thread: 'thread-old', resource: 'org-1' },
+      })
+    );
+  });
+
+  it('starts the idle timer for a legacy link without a notice', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-01-01T12:00:00.000Z');
+    vi.setSystemTime(now);
+    repository.findByExternalUser.mockResolvedValue({
+      ...LINK,
+      externalUserId: '555',
+      externalChatId: '555',
+      externalUsername: 'bob',
+      activeThreadId: 'thread-old',
+      lastActiveAt: null,
+    });
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
+    repository.updateActiveThread.mockResolvedValue({
+      ...LINK,
+      activeThreadId: 'thread-old',
+    });
+    const streamMock = stubAssistantReply(memoryStub('thread-old'));
+    const onIdleReset = vi.fn(async () => undefined);
+
+    await service.handleIncomingMessage(
+      'telegram',
+      '555',
+      'hello',
+      sessionPolicy(onIdleReset)
+    );
+
+    expect(repository.touchActivity).toHaveBeenCalledWith(
+      'link-1',
+      expect.any(Date)
+    );
+    expect(repository.updateActiveThread).not.toHaveBeenCalled();
+    expect(onIdleReset).not.toHaveBeenCalled();
+    expect(streamMock).toHaveBeenCalledWith(
+      'hello',
+      expect.objectContaining({
+        memory: { thread: 'thread-old', resource: 'org-1' },
+      })
+    );
+  });
+
+  it('skips session bookkeeping when no policy is provided', async () => {
+    repository.findByExternalUser.mockResolvedValue({
+      ...LINK,
+      externalUserId: '555',
+      externalChatId: '555',
+      externalUsername: 'bob',
+      lastActiveAt: new Date('2026-01-01T10:00:00.000Z'),
+    });
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
+    repository.updateActiveThread.mockResolvedValue({
+      ...LINK,
+      activeThreadId: 'thread-new',
+    });
+    stubAssistantReply();
+
+    await service.handleIncomingMessage('telegram', '555', 'hello');
+
+    expect(repository.touchActivity).not.toHaveBeenCalled();
+    expect(repository.updateActiveThread).toHaveBeenCalledWith(
+      'link-1',
+      expect.any(String),
+      expect.any(Date)
+    );
+  });
+
+  it('returns unlinked when the link disappears under the lock', async () => {
+    repository.findByExternalUser
+      .mockResolvedValueOnce({
+        ...LINK,
+        externalUserId: '555',
+        externalChatId: '555',
+      })
+      .mockResolvedValueOnce(null);
+    repository.findMembership.mockResolvedValue(MEMBERSHIP);
+
+    const res = await service.handleIncomingMessage('telegram', '555', 'hello');
+
+    expect(res).toEqual({ status: 'unlinked' });
+    expect(mastraService.mastra).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['user id', { userId: 'user-2' }],
+    ['organization id', { organizationId: 'org-2' }],
+  ])(
+    'rejects a fresh link whose %s changed under the lock',
+    async (_field, override) => {
+      const authLink = {
+        ...LINK,
+        externalUserId: '555',
+        externalChatId: '555',
+        activeThreadId: 'thread-old',
+        lastActiveAt: new Date('2026-01-01T10:00:00.000Z'),
+      };
+      repository.findByExternalUser
+        .mockResolvedValueOnce(authLink)
+        .mockResolvedValueOnce({ ...authLink, ...override });
+      repository.findMembership.mockResolvedValue(MEMBERSHIP);
+      const onIdleReset = vi.fn(async () => undefined);
+
+      const res = await service.handleIncomingMessage(
+        'telegram',
+        '555',
+        'hello',
+        { shouldReset: () => true, onIdleReset }
+      );
+
+      expect(res).toEqual({ status: 'unauthorized' });
+      expect(onIdleReset).not.toHaveBeenCalled();
+      expect(repository.updateActiveThread).not.toHaveBeenCalled();
+      expect(mastraService.mastra).not.toHaveBeenCalled();
+    }
+  );
 });

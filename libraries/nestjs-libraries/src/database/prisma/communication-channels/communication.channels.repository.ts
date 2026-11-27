@@ -88,11 +88,19 @@ export class CommunicationChannelsRepository {
 
   async updateActiveThread(
     id: string,
-    activeThreadId: string | null
+    activeThreadId: string | null,
+    lastActiveAt: Date
   ): Promise<CommunicationChannelLink> {
     return this._links.model.communicationChannelLink.update({
       where: { id },
-      data: { activeThreadId },
+      data: { activeThreadId, lastActiveAt },
+    });
+  }
+
+  async touchActivity(id: string, at: Date): Promise<void> {
+    await this._links.model.communicationChannelLink.updateMany({
+      where: { id },
+      data: { lastActiveAt: at },
     });
   }
 
