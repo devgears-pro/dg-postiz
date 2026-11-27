@@ -20,13 +20,41 @@ import {
   DEFAULT_TITLE_INSTRUCTIONS,
   renderAgentInstructions,
 } from '@gitroom/nestjs-libraries/chat/agent.prompt';
+import { AgentTimeProcessor } from '@gitroom/nestjs-libraries/chat/agent.time.processor';
+import { AgentHistoryProcessor } from '@gitroom/nestjs-libraries/chat/agent.history.processor';
 import { buildPromptTracingOptions } from '@gitroom/nestjs-libraries/chat/agent.observability';
 import type { ResolvedPrompt } from '@gitroom/nestjs-libraries/chat/langfuse.prompt.service';
-import dayjs from 'dayjs';
 
 export const AgentState = object({
   proverbs: array(string()).default([]),
 });
+
+export const AGENT_WORKING_MEMORY = {
+  enabled: true,
+  schema: AgentState,
+  useStateSignals: true,
+};
+
+export const AGENT_MEMORY_OPTIONS = {
+  lastMessages: Number.MAX_SAFE_INTEGER,
+};
+
+type TitleModelContext = {
+  get: (key: string) => unknown;
+};
+
+export const resolveTitleModel = (
+  requestContext: TitleModelContext | undefined,
+  env: NodeJS.ProcessEnv = process.env
+) => {
+  const prepared = requestContext?.get('agentTitleModel');
+  if (prepared) return prepared;
+
+  const configured =
+    env.POSTIZ_AI_TITLE_MODEL?.trim() || env.POSTIZ_AI_MODEL?.trim();
+
+  return openai.chat(configured || 'gpt-5.2');
+};
 
 @Injectable()
 export class LoadToolsService {
@@ -79,6 +107,40 @@ export class LoadToolsService {
   }
 
   async agent() {
+    const memory = new Memory({
+      storage: pStore,
+      options: {
+        generateTitle: {
+          model: (({
+            requestContext,
+          }: {
+            requestContext?: RequestContext<Record<string, unknown>>;
+          }) => resolveTitleModel(requestContext)) as never,
+          instructions: async ({
+            requestContext,
+          }: {
+            requestContext?: RequestContext<unknown>;
+          }) => {
+            const titlePrompt = requestContext?.getRaw('agentTitlePrompt') as
+              | ResolvedPrompt
+              | undefined;
+            if (titlePrompt?.text) return titlePrompt.text;
+            if (!requestContext) return DEFAULT_TITLE_INSTRUCTIONS;
+            const prepared = await this._runtime().ensurePrepared(
+              requestContext as unknown as AgentRequestContext
+            );
+            return prepared.titlePrompt?.text ?? DEFAULT_TITLE_INSTRUCTIONS;
+          },
+        },
+        workingMemory: AGENT_WORKING_MEMORY,
+        ...AGENT_MEMORY_OPTIONS,
+      },
+    });
+    const memoryStore = await memory.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new Error('Mastra memory storage is unavailable');
+    }
+
     return new Agent({
       id: 'postiz',
       name: 'postiz',
@@ -88,11 +150,14 @@ export class LoadToolsService {
         const prepared = await this._runtime().ensurePrepared(requestContext);
         return renderAgentInstructions({
           prompt: prepared.prompt?.text ?? prepared.config.prompt,
-          date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
           ui: requestContext.get('ui') === 'true',
           client: String(requestContext.get('client') || ''),
         });
       },
+      inputProcessors: [
+        new AgentHistoryProcessor(memoryStore),
+        new AgentTimeProcessor(),
+      ],
       model: async ({ requestContext }) => {
         const prepared = await this._runtime().ensurePrepared(requestContext);
         return prepared.model as never;
@@ -127,39 +192,7 @@ export class LoadToolsService {
             : {}),
         } as never;
       },
-      memory: new Memory({
-        storage: pStore,
-        options: {
-          generateTitle: {
-            model: (({
-              requestContext,
-            }: {
-              requestContext?: RequestContext<Record<string, unknown>>;
-            }) =>
-              requestContext?.get('agentTitleModel') ??
-              openai.chat('gpt-5.2')) as never,
-            instructions: async ({
-              requestContext,
-            }: {
-              requestContext?: RequestContext<unknown>;
-            }) => {
-              const titlePrompt = requestContext?.getRaw('agentTitlePrompt') as
-                | ResolvedPrompt
-                | undefined;
-              if (titlePrompt?.text) return titlePrompt.text;
-              if (!requestContext) return DEFAULT_TITLE_INSTRUCTIONS;
-              const prepared = await this._runtime().ensurePrepared(
-                requestContext as unknown as AgentRequestContext
-              );
-              return prepared.titlePrompt?.text ?? DEFAULT_TITLE_INSTRUCTIONS;
-            },
-          },
-          workingMemory: {
-            enabled: true,
-            schema: AgentState,
-          },
-        },
-      }),
+      memory,
     });
   }
 

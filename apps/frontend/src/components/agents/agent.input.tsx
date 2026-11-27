@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   useCopilotChatInternal,
   useCopilotContext,
@@ -24,11 +24,31 @@ export const Input = ({
 }) => {
   const context = useChatContext();
   const copilotContext = useCopilotContext();
-  const { interrupt, isAvailable: isReady } = useCopilotChatInternal();
+  const { interrupt, isAvailable: isReady, messages } =
+    useCopilotChatInternal();
   const showPoweredBy = !copilotContext.copilotApiConfig?.publicApiKey;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isComposing, setIsComposing] = useState(false);
+  const [settledText, setSettledText] = useState<string | null>(null);
+  const lastMessage = messages[messages.length - 1];
+  const lastAssistantText = useMemo(() => {
+    if (lastMessage?.role !== 'assistant') return '';
+    const content: unknown = lastMessage.content;
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    return content
+      .map((part: { type?: string; text?: string }) =>
+        part.type === 'text' ? part.text ?? '' : ''
+      )
+      .join('');
+  }, [lastMessage]);
+
+  useEffect(() => {
+    if (!inProgress || !lastAssistantText) return;
+    const timer = setTimeout(() => setSettledText(lastAssistantText), 500);
+    return () => clearTimeout(timer);
+  }, [inProgress, lastAssistantText]);
 
   const handleDivClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -44,15 +64,17 @@ export const Input = ({
   };
 
   const [text, setText] = useState('');
+  const textSettled =
+    Boolean(lastAssistantText) && settledText === lastAssistantText;
   const send = () => {
-    if (inProgress || !isReady) return;
+    if ((inProgress && !textSettled) || !isReady) return;
     onSend(text);
     setText('');
 
     textareaRef.current?.focus();
   };
 
-  const isInProgress = inProgress;
+  const isInProgress = inProgress && !textSettled;
   const buttonIcon =
     isInProgress && !hideStopButton
       ? context.icons.stopIcon
@@ -122,9 +144,9 @@ export const Input = ({
           <button
             disabled={sendDisabled}
             onClick={isInProgress && !hideStopButton ? onStop : send}
-            data-copilotkit-in-progress={inProgress}
+            data-copilotkit-in-progress={isInProgress}
             data-test-id={
-              inProgress
+              isInProgress
                 ? 'copilot-chat-request-in-progress'
                 : 'copilot-chat-ready'
             }

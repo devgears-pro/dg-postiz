@@ -57,7 +57,6 @@ const telegramClientHint =
 
 export function renderAgentInstructions(options: {
   prompt: string;
-  date: string;
   ui: boolean;
   client?: string;
 }): string {
@@ -68,9 +67,6 @@ export function renderAgentInstructions(options: {
     .filter(Boolean)
     .join('\n');
 
-  return `Global information:
-  - Date (UTC): ${options.date}
-
-${options.prompt}
+  return `${options.prompt}
 ${hints}`;
 }
