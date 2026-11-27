@@ -144,9 +144,9 @@ export const Input = ({
           <button
             disabled={sendDisabled}
             onClick={isInProgress && !hideStopButton ? onStop : send}
-            data-copilotkit-in-progress={inProgress}
+            data-copilotkit-in-progress={isInProgress}
             data-test-id={
-              inProgress
+              isInProgress
                 ? 'copilot-chat-request-in-progress'
                 : 'copilot-chat-ready'
             }
