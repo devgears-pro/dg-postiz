@@ -36,7 +36,7 @@ const writingMessage: ChatMessage = {
 };
 
 describe('agent turn notice', () => {
-  it('[TC-2-32-2] reports the limit when the turn exhausts the step budget', () => {
+  it('[TC-2-34-2] reports the limit when the turn exhausts the step budget', () => {
     const limit = turnNotice(
       [
         userMessage,

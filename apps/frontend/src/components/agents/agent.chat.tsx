@@ -13,7 +13,6 @@ import {
   CopilotChat,
   CopilotKitCSSProperties,
   InputProps,
-  RenderMessageProps,
   UserMessageProps,
 } from '@copilotkit/react-ui';
 import { Input } from '@gitroom/frontend/components/agents/agent.input';
@@ -43,7 +42,7 @@ import { useToaster } from '@gitroom/react/toaster/toaster';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
 import type { SelectedDoc } from '@gitroom/frontend/components/docs/docs.picker.modal';
 import { formatUserMessageContent } from './agent.message.format';
-import { AgentRenderMessage } from './agent.turn';
+import { AgentRenderMessage, AgentTurnProvider } from './agent.turn';
 
 export const AgentChat: FC = () => {
   const { backendUrl } = useVariables();
@@ -65,12 +64,6 @@ export const AgentChat: FC = () => {
     return {};
   }, [fetch]);
   const { data: limits } = useSWR('/copilot/limits', loadLimits);
-  const AgentMessageRenderer = useMemo(() => {
-    const Component = (props: RenderMessageProps) => (
-      <AgentRenderMessage {...props} maxSteps={limits?.maxSteps ?? 10} />
-    );
-    return Component;
-  }, [limits?.maxSteps]);
   const [historyLoading, setHistoryLoading] = useState(params.id !== 'new');
 
   return (
@@ -112,9 +105,10 @@ export const AgentChat: FC = () => {
           </div>
         )}
         <div className="absolute left-0 w-full h-full pb-[20px]">
-          <CopilotChat
-            className="w-full h-full"
-            RenderMessage={AgentMessageRenderer}
+          <AgentTurnProvider maxSteps={limits?.maxSteps ?? 10}>
+            <CopilotChat
+              className="w-full h-full"
+              RenderMessage={AgentRenderMessage}
             labels={{
               title: t('your_assistant', 'Your Assistant'),
               initial: t('agent_welcome_message', `Hello, I am your Postiz agent 🙌🏻.
@@ -147,7 +141,8 @@ You can also use me as an MCP Server, check Settings >> Agents / Dev
             }}
             UserMessage={Message}
             Input={NewInput}
-          />
+            />
+          </AgentTurnProvider>
         </div>
       </div>
     </CopilotKit>

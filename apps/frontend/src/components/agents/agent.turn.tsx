@@ -1,9 +1,53 @@
 'use client';
 
-import React from 'react';
+import React, { createContext, ReactNode, useContext } from 'react';
 import type { RenderMessageProps } from '@copilotkit/react-ui';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { AgentTurnNotice, turnNotice } from './agent.turn.notice';
+import { AgentTurnStatus, deriveAgentTurnStatus } from './agent.turn.status';
+
+const AgentTurnContext = createContext<{ maxSteps: number }>({ maxSteps: 10 });
+
+export const AgentTurnProvider = ({
+  maxSteps,
+  children,
+}: {
+  maxSteps: number;
+  children: ReactNode;
+}) => (
+  <AgentTurnContext.Provider value={{ maxSteps }}>
+    {children}
+  </AgentTurnContext.Provider>
+);
+
+const STATUS_LABELS: Record<
+  Exclude<AgentTurnStatus, 'idle'>,
+  [key: string, fallback: string]
+> = {
+  thinking: ['agent_status_thinking', 'Thinking...'],
+  'running-tool': ['agent_status_running_tool', 'Running an action...'],
+  waiting: ['agent_status_waiting', 'Waiting for the result...'],
+  writing: ['agent_status_writing', 'Writing...'],
+};
+
+const TurnStatus = ({ status }: { status: AgentTurnStatus }) => {
+  const t = useT();
+  if (status === 'idle') {
+    return null;
+  }
+  const [key, fallback] = STATUS_LABELS[status];
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-testid="agent-turn-status"
+      className="px-[12px] py-[6px] text-[13px] opacity-70"
+    >
+      {t(key, fallback)}
+    </div>
+  );
+};
 
 const NOTICE_LABELS: Record<
   Exclude<AgentTurnNotice, null>,
@@ -100,23 +144,27 @@ const renderMessage = (props: RenderMessageProps) => {
   return null;
 };
 
-export const AgentRenderMessage = (
-  props: RenderMessageProps & { maxSteps: number }
-) => {
+export const AgentRenderMessage = (props: RenderMessageProps) => {
+  const { maxSteps } = useContext(AgentTurnContext);
   const notice =
     props.inProgress || !props.isCurrentMessage
       ? null
-      : turnNotice(props.messages, props.maxSteps);
+      : turnNotice(props.messages, maxSteps);
   const rendered = renderMessage(props);
 
   if (!props.isCurrentMessage) {
     return rendered;
   }
+  const status = deriveAgentTurnStatus(props.messages, props.inProgress);
 
   return (
     <>
       {rendered}
-      {notice ? <TurnNotice notice={notice} /> : null}
+      {props.inProgress ? (
+        <TurnStatus status={status} />
+      ) : notice ? (
+        <TurnNotice notice={notice} />
+      ) : null}
     </>
   );
 };
