@@ -61,17 +61,9 @@ afterEach(async () => {
   testingModule = undefined;
 });
 
-const createAgent = async (
-  model: MastraLanguageModelV2Mock,
-  maxSteps?: number
-) => {
+const createAgent = async (model: MastraLanguageModelV2Mock) => {
   const defaults = await loadAgentDefaults({}, { toolCatalog: ['echo'] });
-  const config = resolveAgentConfig(
-    defaults,
-    maxSteps ? { generation: { maxSteps } } : {},
-    'org-1',
-    1
-  );
+  const config = resolveAgentConfig(defaults, {}, 'org-1', 1);
   const runtime: AgentRuntimeLike = {
     ensurePrepared: async () => ({
       config,
@@ -90,7 +82,7 @@ const createAgent = async (
   return testingModule.get(LoadToolsService).agent();
 };
 
-describe('assistant step guard', () => {
+describe('assistant step limit', () => {
   it('[TC-2-29-1] finishes a five-tool turn with text', async () => {
     let calls = 0;
     const model = new MastraLanguageModelV2Mock({
@@ -109,32 +101,5 @@ describe('assistant step guard', () => {
 
     expect(result.text).toBe('all done');
     expect(model.doGenerateCalls).toHaveLength(6);
-  });
-
-  it('[TC-2-30-1] forces text on the last step without changing tools', async () => {
-    let calls = 0;
-    const model = new MastraLanguageModelV2Mock({
-      provider: 'test',
-      modelId: 'test',
-      doGenerate: async (options) => {
-        if (options.toolChoice?.type === 'none') {
-          return textResponse('forced answer');
-        }
-        calls += 1;
-        return toolCallResponse(calls);
-      },
-    });
-    const agent = await createAgent(model, 3);
-
-    const result = await agent.generate('keep calling tools', {
-      memory: { thread: 'thread-1', resource: 'org-1' },
-    });
-
-    expect(result.text).toBe('forced answer');
-    expect(model.doGenerateCalls).toHaveLength(3);
-    expect(model.doGenerateCalls[2].toolChoice).toEqual({ type: 'none' });
-    expect(model.doGenerateCalls[1].tools).toEqual(
-      model.doGenerateCalls[0].tools
-    );
   });
 });

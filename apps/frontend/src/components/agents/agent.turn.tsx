@@ -1,12 +1,24 @@
 'use client';
 
-import React, { createContext, ReactNode, useContext } from 'react';
+import React, {
+  createContext,
+  ReactNode,
+  useContext,
+  useState,
+} from 'react';
 import type { RenderMessageProps } from '@copilotkit/react-ui';
+import { useCopilotChatInternal } from '@copilotkit/react-core';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { AgentTurnNotice, turnNotice } from './agent.turn.notice';
 import { AgentTurnStatus, deriveAgentTurnStatus } from './agent.turn.status';
 
-const AgentTurnContext = createContext<{ maxSteps: number }>({ maxSteps: 10 });
+type AgentTurnContextValue = {
+  notice: AgentTurnNotice;
+};
+
+const AgentTurnContext = createContext<AgentTurnContextValue>({
+  notice: null,
+});
 
 export const AgentTurnProvider = ({
   maxSteps,
@@ -14,11 +26,26 @@ export const AgentTurnProvider = ({
 }: {
   maxSteps: number;
   children: ReactNode;
-}) => (
-  <AgentTurnContext.Provider value={{ maxSteps }}>
-    {children}
-  </AgentTurnContext.Provider>
-);
+}) => {
+  const { messages, isLoading } = useCopilotChatInternal();
+  const [wasRunning, setWasRunning] = useState(false);
+  const [notice, setNotice] = useState<AgentTurnNotice>(null);
+
+  if (isLoading !== wasRunning) {
+    setWasRunning(isLoading);
+    if (isLoading) {
+      setNotice(null);
+    } else if (wasRunning) {
+      setNotice(turnNotice(messages, maxSteps));
+    }
+  }
+
+  return (
+    <AgentTurnContext.Provider value={{ notice }}>
+      {children}
+    </AgentTurnContext.Provider>
+  );
+};
 
 const STATUS_LABELS: Record<
   Exclude<AgentTurnStatus, 'idle'>,
@@ -145,11 +172,7 @@ const renderMessage = (props: RenderMessageProps) => {
 };
 
 export const AgentRenderMessage = (props: RenderMessageProps) => {
-  const { maxSteps } = useContext(AgentTurnContext);
-  const notice =
-    props.inProgress || !props.isCurrentMessage
-      ? null
-      : turnNotice(props.messages, maxSteps);
+  const { notice } = useContext(AgentTurnContext);
   const rendered = renderMessage(props);
 
   if (!props.isCurrentMessage) {
