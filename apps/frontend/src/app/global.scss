@@ -761,10 +761,6 @@ html[dir='rtl'] [dir='ltr'] {
 }
 
 .agent {
-  [data-testid='copilot-loading-cursor'] {
-    display: none;
-  }
-
   .copilotKitInputContainer {
     padding: 0 24px !important;
   }

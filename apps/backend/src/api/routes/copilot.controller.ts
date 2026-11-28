@@ -35,6 +35,7 @@ import {
 } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
 import { AgentRuntimeService } from '@gitroom/nestjs-libraries/chat/agent.runtime';
 import { AgentConfigService } from '@gitroom/nestjs-libraries/chat/agent.config.service';
+import type { AgentConfigView } from '@gitroom/helpers/agent/agent.config.schema';
 import {
   applyTraceIdentity,
   assertThreadAccess,
@@ -51,7 +52,7 @@ export type ChannelsContext = {
 };
 
 type AgentLimitsView = {
-  effective: { generation: { maxSteps?: number } };
+  effective: { generation: AgentConfigView['effective']['generation'] };
 };
 
 const HISTORY_PAGE_SIZE = 200;

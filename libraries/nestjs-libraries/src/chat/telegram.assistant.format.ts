@@ -64,15 +64,15 @@ export function formatTelegramSystemNotice(text: string): string {
   return `<i>${escapeHtml(text)}</i>`;
 }
 
-const EMPTY_REPLY_NOTICE: Record<string, string> = {
+const EMPTY_REPLY_NOTICE = {
   uk: 'Не вдалося сформулювати відповідь. Перевірте результат у Postiz або повторіть запит.',
   en: 'Could not compose a reply. Check the result in Postiz or retry the request.',
 };
 
 export function formatEmptyReplyNotice(languageCode?: string): string {
-  const language = languageCode?.split('-')[0]?.toLowerCase() ?? '';
+  const language = languageCode?.split('-')[0]?.toLowerCase();
   return formatTelegramSystemNotice(
-    EMPTY_REPLY_NOTICE[language] ?? EMPTY_REPLY_NOTICE.en
+    language === 'uk' ? EMPTY_REPLY_NOTICE.uk : EMPTY_REPLY_NOTICE.en
   );
 }
 

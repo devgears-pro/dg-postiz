@@ -806,11 +806,11 @@ export class TelegramAssistantService
       await this._sendPhoto(chatId, img.path);
     }
 
-    if (result.text) {
+    if (result.text?.trim()) {
       await this._sendMessage(chatId, formatTelegramHtml(result.text), {
         parseMode: 'HTML',
       });
-    } else {
+    } else if (result.generatedImages.length === 0) {
       await this._sendMessage(
         chatId,
         formatEmptyReplyNotice(message.from?.language_code),

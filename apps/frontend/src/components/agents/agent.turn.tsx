@@ -103,9 +103,10 @@ const renderMessage = (props: RenderMessageProps) => {
 export const AgentRenderMessage = (
   props: RenderMessageProps & { maxSteps: number }
 ) => {
-  const notice = props.inProgress
-    ? null
-    : turnNotice(props.messages, props.maxSteps);
+  const notice =
+    props.inProgress || !props.isCurrentMessage
+      ? null
+      : turnNotice(props.messages, props.maxSteps);
   const rendered = renderMessage(props);
 
   if (!props.isCurrentMessage) {

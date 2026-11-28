@@ -56,12 +56,28 @@ describe('agent turn notice', () => {
       10
     );
     const within = turnNotice([userMessage, writingMessage], 10);
+    const merged = turnNotice(
+      [
+        userMessage,
+        {
+          id: 'assistant-merged',
+          role: 'assistant' as const,
+          toolCalls: Array.from({ length: 10 }, (_, index) => ({
+            id: `tool-call-merged-${index}`,
+            type: 'function' as const,
+            function: { name: 'customToolX', arguments: '{}' },
+          })),
+        },
+      ],
+      10
+    );
     const empty = turnNotice(
       [userMessage, runningToolMessage, toolResultMessage],
       10
     );
 
     expect(limit).toBe('limit');
+    expect(merged).toBe('limit');
     expect(within).toBeNull();
     expect(empty).toBe('empty');
   });

@@ -1,6 +1,6 @@
 import type { MessagesProps } from '@copilotkit/react-ui';
 
-export type AgentTurnMessage = MessagesProps['messages'][number];
+type AgentTurnMessage = MessagesProps['messages'][number];
 
 export type AgentTurnNotice = 'empty' | 'limit' | null;
 
@@ -13,9 +13,16 @@ const lastUserIndex = (messages: AgentTurnMessage[]): number => {
   return -1;
 };
 
-const hasOutput = (message: AgentTurnMessage): boolean =>
-  message.role === 'assistant' &&
-  (Boolean(message.content?.trim()) || Boolean(message.toolCalls?.length));
+const turnSteps = (messages: AgentTurnMessage[]): number =>
+  messages.reduce((steps, message) => {
+    if (message.role !== 'assistant') {
+      return steps;
+    }
+    if (message.content?.trim()) {
+      return steps + 1;
+    }
+    return steps + (message.toolCalls?.length ?? 0);
+  }, 0);
 
 export function turnNotice(
   messages: AgentTurnMessage[],
@@ -27,17 +34,11 @@ export function turnNotice(
   }
 
   const turn = messages.slice(lastUser + 1);
-  const producedOutput = turn.filter(hasOutput);
-  if (maxSteps > 0 && producedOutput.length >= maxSteps) {
+  if (maxSteps > 0 && turnSteps(turn) >= maxSteps) {
     return 'limit';
   }
-  if (
-    !producedOutput.some(
-      (message) =>
-        message.role === 'assistant' && Boolean(message.content?.trim())
-    )
-  ) {
-    return 'empty';
-  }
-  return null;
+  const hasText = turn.some(
+    (message) => message.role === 'assistant' && Boolean(message.content?.trim())
+  );
+  return hasText ? null : 'empty';
 }

@@ -61,19 +61,25 @@ const jsonResponse = (body: unknown) =>
 describe('TelegramAssistantService', () => {
   const channels = {
     getAuthorizedLink: vi.fn<TelegramChannelsPort['getAuthorizedLink']>(),
-    createExternalConnectToken:
-      vi.fn<TelegramChannelsPort['createExternalConnectToken']>(),
+    createExternalConnectToken: vi.fn<
+      TelegramChannelsPort['createExternalConnectToken']
+    >(),
     confirmWebToken: vi.fn<TelegramChannelsPort['confirmWebToken']>(),
-    listThreadsForExternalUser:
-      vi.fn<TelegramChannelsPort['listThreadsForExternalUser']>(),
-    selectThreadForExternalUser:
-      vi.fn<TelegramChannelsPort['selectThreadForExternalUser']>(),
-    startNewThreadForExternalUser:
-      vi.fn<TelegramChannelsPort['startNewThreadForExternalUser']>(),
-    handleIncomingMessage:
-      vi.fn<TelegramChannelsPort['handleIncomingMessage']>(),
-    touchExternalUserActivity:
-      vi.fn<TelegramChannelsPort['touchExternalUserActivity']>(),
+    listThreadsForExternalUser: vi.fn<
+      TelegramChannelsPort['listThreadsForExternalUser']
+    >(),
+    selectThreadForExternalUser: vi.fn<
+      TelegramChannelsPort['selectThreadForExternalUser']
+    >(),
+    startNewThreadForExternalUser: vi.fn<
+      TelegramChannelsPort['startNewThreadForExternalUser']
+    >(),
+    handleIncomingMessage: vi.fn<
+      TelegramChannelsPort['handleIncomingMessage']
+    >(),
+    touchExternalUserActivity: vi.fn<
+      TelegramChannelsPort['touchExternalUserActivity']
+    >(),
   } satisfies TelegramChannelsPort;
   const media = {
     saveFile: vi.fn<TelegramMediaPort['saveFile']>(),
@@ -370,7 +376,9 @@ describe('TelegramAssistantService', () => {
       link: LINK,
     });
     let resolveReply!: (
-      value: Awaited<ReturnType<TelegramChannelsPort['handleIncomingMessage']>>
+      value: Awaited<
+        ReturnType<TelegramChannelsPort['handleIncomingMessage']>
+      >
     ) => void;
     channels.handleIncomingMessage.mockReturnValue(
       new Promise((resolve) => {
@@ -470,10 +478,16 @@ describe('TelegramAssistantService', () => {
           }
       );
     expect(
-      capturedPolicy?.shouldReset(new Date('2026-01-01T11:00:00.000Z'), now)
+      capturedPolicy?.shouldReset(
+        new Date('2026-01-01T11:00:00.000Z'),
+        now
+      )
     ).toBe(true);
     expect(
-      capturedPolicy?.shouldReset(new Date('2026-01-01T11:00:01.000Z'), now)
+      capturedPolicy?.shouldReset(
+        new Date('2026-01-01T11:00:01.000Z'),
+        now
+      )
     ).toBe(false);
     expect(messages[0]).toEqual({
       chat_id: '777',

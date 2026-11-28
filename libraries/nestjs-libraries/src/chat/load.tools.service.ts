@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Agent } from '@mastra/core/agent';
+import type { ProcessInputStepArgs } from '@mastra/core/processors';
 import { openai } from '@ai-sdk/openai';
 import { Memory } from '@mastra/memory';
 import { pStore } from '@gitroom/nestjs-libraries/chat/mastra.store';
@@ -177,7 +178,7 @@ export class LoadToolsService {
         const tracingOptions = buildPromptTracingOptions(prepared.prompt);
         return {
           ...(maxSteps ? { maxSteps } : {}),
-          prepareStep: ({ stepNumber }: { stepNumber: number }) =>
+          prepareStep: ({ stepNumber }: ProcessInputStepArgs) =>
             maxSteps && stepNumber >= maxSteps - 1
               ? { toolChoice: 'none' as const }
               : undefined,

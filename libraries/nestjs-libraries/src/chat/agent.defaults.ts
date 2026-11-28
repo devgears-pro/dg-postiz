@@ -412,7 +412,13 @@ export async function loadAgentDefaults(
           : 'builtin',
     providerBaseUrl: config.provider ? 'file' : env.OPENAI_BASE_URL ? 'env' : 'builtin',
     builtinTools: config.builtinTools ? 'file' : 'builtin',
-    generation: config.generation ? 'file' : 'env',
+    generation: config.generation
+      ? 'file'
+      : env.POSTIZ_AI_MAX_STEPS ||
+          env.POSTIZ_AI_MAX_OUTPUT_TOKENS ||
+          env.POSTIZ_AI_TEMPERATURE
+        ? 'env'
+        : 'builtin',
     langfuse: config.langfuse ? 'file' : langfuseBaseUrl ? 'env' : 'builtin',
     skills: skillsSource,
     mcpServers: config.mcpServers ? 'file' : 'builtin',
