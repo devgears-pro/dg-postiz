@@ -13,6 +13,7 @@ import {
   IncomingSessionPolicy,
 } from '@gitroom/nestjs-libraries/chat/communication.channels.service';
 import {
+  formatEmptyReplyNotice,
   formatTelegramHtml,
   formatTelegramSystemNotice,
   splitTelegramMessage,
@@ -44,6 +45,7 @@ export type TelegramUser = {
   id: number;
   username?: string;
   first_name?: string;
+  language_code?: string;
 };
 
 export type TelegramChat = {
@@ -808,6 +810,12 @@ export class TelegramAssistantService
       await this._sendMessage(chatId, formatTelegramHtml(result.text), {
         parseMode: 'HTML',
       });
+    } else {
+      await this._sendMessage(
+        chatId,
+        formatEmptyReplyNotice(message.from?.language_code),
+        { parseMode: 'HTML' }
+      );
     }
   }
 }

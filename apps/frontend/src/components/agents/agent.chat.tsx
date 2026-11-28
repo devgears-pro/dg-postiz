@@ -42,6 +42,7 @@ import { useToaster } from '@gitroom/react/toaster/toaster';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
 import type { SelectedDoc } from '@gitroom/frontend/components/docs/docs.picker.modal';
 import { formatUserMessageContent } from './agent.message.format';
+import { AgentRenderMessage } from './agent.turn';
 
 export const AgentChat: FC = () => {
   const { backendUrl } = useVariables();
@@ -91,9 +92,12 @@ export const AgentChat: FC = () => {
         <div className="absolute left-0 w-full h-full pb-[20px]">
           <CopilotChat
             className="w-full h-full"
+            RenderMessage={AgentRenderMessage}
             labels={{
               title: t('your_assistant', 'Your Assistant'),
-              initial: t('agent_welcome_message', `Hello, I am your Postiz agent 🙌🏻.
+              initial: t(
+                'agent_welcome_message',
+                `Hello, I am your Postiz agent 🙌🏻.
               
 I can schedule a post or multiple posts to multiple channels and generate pictures and videos.
 
@@ -102,7 +106,8 @@ You can select the channels you want to use from the left menu.
 You can see your previous conversations from the right menu.
 
 You can also use me as an MCP Server, check Settings >> Agents / Dev
-`),
+`
+              ),
               placeholder: t('agent_placeholder', 'Type a message...'),
               error: t(
                 'agent_error',

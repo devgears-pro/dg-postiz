@@ -173,9 +173,14 @@ export class LoadToolsService {
       defaultOptions: async ({ requestContext }) => {
         const prepared = await this._runtime().ensurePrepared(requestContext);
         const settings = prepared.config.generation;
+        const maxSteps = settings.maxSteps;
         const tracingOptions = buildPromptTracingOptions(prepared.prompt);
         return {
-          ...(settings.maxSteps ? { maxSteps: settings.maxSteps } : {}),
+          ...(maxSteps ? { maxSteps } : {}),
+          prepareStep: ({ stepNumber }: { stepNumber: number }) =>
+            maxSteps && stepNumber >= maxSteps - 1
+              ? { toolChoice: 'none' as const }
+              : undefined,
           ...(tracingOptions ? { tracingOptions } : {}),
           ...(settings.temperature !== undefined ||
           settings.maxOutputTokens !== undefined

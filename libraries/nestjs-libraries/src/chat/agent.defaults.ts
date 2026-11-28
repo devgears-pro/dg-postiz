@@ -16,6 +16,7 @@ import {
 } from '@gitroom/nestjs-libraries/chat/agent.prompt';
 
 const DEFAULT_MODEL = 'gpt-5.2';
+const DEFAULT_MAX_STEPS = 10;
 const DEFAULT_PROVIDER_BASE_URL = 'https://api.openai.com/v1';
 const DEFAULT_TITLE_MODEL = DEFAULT_MODEL;
 const DEFAULT_IMAGE_MODEL = 'chatgpt-image-latest';
@@ -349,7 +350,8 @@ export async function loadAgentDefaults(
     ...config.generation,
     maxSteps:
       config.generation?.maxSteps ??
-      readNumber(env, 'POSTIZ_AI_MAX_STEPS', { min: 1, max: AGENT_CONFIG_LIMITS.maxSteps }),
+      readNumber(env, 'POSTIZ_AI_MAX_STEPS', { min: 1, max: AGENT_CONFIG_LIMITS.maxSteps }) ??
+      DEFAULT_MAX_STEPS,
     maxOutputTokens:
       config.generation?.maxOutputTokens ??
       readNumber(env, 'POSTIZ_AI_MAX_OUTPUT_TOKENS', {
