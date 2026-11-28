@@ -3,54 +3,37 @@
 import React from 'react';
 import type { RenderMessageProps } from '@copilotkit/react-ui';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import {
-  AgentTurnStatus,
-  deriveAgentTurnStatus,
-  hasUnansweredTurn,
-} from './agent.turn.status';
+import { AgentTurnNotice, turnNotice } from './agent.turn.notice';
 
-const STATUS_LABELS: Record<
-  Exclude<AgentTurnStatus, 'idle'>,
+const NOTICE_LABELS: Record<
+  Exclude<AgentTurnNotice, null>,
   [key: string, fallback: string]
 > = {
-  thinking: ['agent_status_thinking', 'Thinking...'],
-  'running-tool': ['agent_status_running_tool', 'Running an action...'],
-  waiting: ['agent_status_waiting', 'Waiting for the result...'],
-  writing: ['agent_status_writing', 'Writing...'],
+  empty: [
+    'agent_empty_reply',
+    'Could not compose a reply. Check the result in Postiz or retry the request.',
+  ],
+  limit: [
+    'agent_turn_limit',
+    'The step limit was reached. The answer may be incomplete.',
+  ],
 };
 
-const TurnStatus = ({ status }: { status: AgentTurnStatus }) => {
+const TurnNotice = ({ notice }: { notice: Exclude<AgentTurnNotice, null> }) => {
   const t = useT();
-  if (status === 'idle') {
-    return null;
-  }
-  const [key, fallback] = STATUS_LABELS[status];
+  const [key, fallback] = NOTICE_LABELS[notice];
 
   return (
     <div
       role="status"
-      aria-live="polite"
-      data-testid="agent-turn-status"
-      className="px-[12px] py-[6px] text-[13px] opacity-70"
-    >
-      {t(key, fallback)}
-    </div>
-  );
-};
-
-const EmptyReplyNotice = () => {
-  const t = useT();
-
-  return (
-    <div
-      role="status"
-      data-testid="agent-empty-reply-notice"
+      data-testid={
+        notice === 'limit'
+          ? 'agent-turn-limit-notice'
+          : 'agent-empty-reply-notice'
+      }
       className="px-[12px] py-[6px] text-[13px] italic opacity-70"
     >
-      {t(
-        'agent_empty_reply',
-        'Could not compose a reply. Check the result in Postiz or retry the request.'
-      )}
+      {t(key, fallback)}
     </div>
   );
 };
@@ -117,9 +100,12 @@ const renderMessage = (props: RenderMessageProps) => {
   return null;
 };
 
-export const AgentRenderMessage = (props: RenderMessageProps) => {
-  const status = deriveAgentTurnStatus(props.messages, props.inProgress);
-  const notice = !props.inProgress && hasUnansweredTurn(props.messages);
+export const AgentRenderMessage = (
+  props: RenderMessageProps & { maxSteps: number }
+) => {
+  const notice = props.inProgress
+    ? null
+    : turnNotice(props.messages, props.maxSteps);
   const rendered = renderMessage(props);
 
   if (!props.isCurrentMessage) {
@@ -129,11 +115,7 @@ export const AgentRenderMessage = (props: RenderMessageProps) => {
   return (
     <>
       {rendered}
-      {props.inProgress ? (
-        <TurnStatus status={status} />
-      ) : notice ? (
-        <EmptyReplyNotice />
-      ) : null}
+      {notice ? <TurnNotice notice={notice} /> : null}
     </>
   );
 };

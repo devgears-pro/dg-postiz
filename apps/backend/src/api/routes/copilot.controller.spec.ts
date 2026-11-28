@@ -35,6 +35,10 @@ vi.mock('@gitroom/nestjs-libraries/chat/agent.runtime', () => ({
   AgentRuntimeService: class {},
 }));
 
+vi.mock('@gitroom/nestjs-libraries/chat/agent.config.service', () => ({
+  AgentConfigService: class {},
+}));
+
 vi.mock(
   '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service',
   () => ({ SubscriptionService: class {} })
@@ -71,6 +75,9 @@ const buildController = (resourceId: string | null) => {
     applyTo: vi.fn(),
     release: async () => undefined,
   }));
+  const getView = vi.fn(async () => ({
+    effective: { generation: { maxSteps: 10 } },
+  }));
   const mastra = {
     getAgent: () => ({
       getMemory: async () => memory,
@@ -79,10 +86,11 @@ const buildController = (resourceId: string | null) => {
   const controller = new CopilotController(
     {} as SubscriptionService,
     { mastra: async () => mastra } as unknown as MastraService,
-    { prepare } as unknown as AgentRuntimeService
+    { prepare } as unknown as AgentRuntimeService,
+    { getView }
   );
 
-  return { controller, prepare, memory };
+  return { controller, prepare, memory, getView };
 };
 
 const runRequest = (threadId: string) =>
@@ -312,5 +320,14 @@ describe('CopilotController conversation management', () => {
     await expect(
       controller.getMessagesList(organization, 'thread-1')
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('[TC-2-33-2] exposes the effective step limit to the web chat', async () => {
+    const { controller, getView } = buildController('org-1');
+
+    const limits = await controller.limits(organization);
+
+    expect(limits).toEqual({ maxSteps: 10 });
+    expect(getView).toHaveBeenCalledWith('org-1');
   });
 });

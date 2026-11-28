@@ -5,6 +5,7 @@ import {
   Controller,
   Delete,
   Get,
+  Inject,
   Patch,
   Post,
   Req,
@@ -33,6 +34,7 @@ import {
   Sections,
 } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
 import { AgentRuntimeService } from '@gitroom/nestjs-libraries/chat/agent.runtime';
+import { AgentConfigService } from '@gitroom/nestjs-libraries/chat/agent.config.service';
 import {
   applyTraceIdentity,
   assertThreadAccess,
@@ -46,6 +48,10 @@ export type ChannelsContext = {
   integrations: string;
   organization: string;
   ui: string;
+};
+
+type AgentLimitsView = {
+  effective: { generation: { maxSteps?: number } };
 };
 
 const HISTORY_PAGE_SIZE = 200;
@@ -65,7 +71,11 @@ export class CopilotController {
   constructor(
     private _subscriptionService: SubscriptionService,
     private _mastraService: MastraService,
-    private _agentRuntime: AgentRuntimeService
+    private _agentRuntime: AgentRuntimeService,
+    @Inject(AgentConfigService)
+    private _agentConfig: {
+      getView(organizationId: string): Promise<AgentLimitsView>;
+    }
   ) {}
 
   private async threadMemory() {
@@ -195,6 +205,13 @@ export class CopilotController {
     });
 
     return copilotRuntimeHandler(req, res);
+  }
+
+  @Get('/limits')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  async limits(@GetOrgFromRequest() organization: Organization) {
+    const view = await this._agentConfig.getView(organization.id);
+    return { maxSteps: view.effective.generation.maxSteps };
   }
 
   @Get('/credits')

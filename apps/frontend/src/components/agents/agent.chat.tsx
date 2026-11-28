@@ -13,6 +13,7 @@ import {
   CopilotChat,
   CopilotKitCSSProperties,
   InputProps,
+  RenderMessageProps,
   UserMessageProps,
 } from '@copilotkit/react-ui';
 import { Input } from '@gitroom/frontend/components/agents/agent.input';
@@ -31,7 +32,7 @@ import {
 import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { useParams } from 'next/navigation';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { mutate } from 'swr';
+import useSWR, { mutate } from 'swr';
 import { AddEditModal } from '@gitroom/frontend/components/new-launch/add.edit.modal';
 import dayjs from 'dayjs';
 import { fromUtc } from '@gitroom/frontend/components/layout/set.timezone';
@@ -49,6 +50,27 @@ export const AgentChat: FC = () => {
   const params = useParams<{ id: string }>();
   const { properties } = useContext(PropertiesContext);
   const t = useT();
+  const fetch = useFetch();
+  const loadLimits = useCallback(async (): Promise<{ maxSteps?: number }> => {
+    const response = await fetch('/copilot/limits');
+    const data: unknown = await response.json();
+    if (
+      typeof data === 'object' &&
+      data !== null &&
+      'maxSteps' in data &&
+      typeof data.maxSteps === 'number'
+    ) {
+      return { maxSteps: data.maxSteps };
+    }
+    return {};
+  }, [fetch]);
+  const { data: limits } = useSWR('/copilot/limits', loadLimits);
+  const AgentMessageRenderer = useMemo(() => {
+    const Component = (props: RenderMessageProps) => (
+      <AgentRenderMessage {...props} maxSteps={limits?.maxSteps ?? 10} />
+    );
+    return Component;
+  }, [limits?.maxSteps]);
   const [historyLoading, setHistoryLoading] = useState(params.id !== 'new');
 
   return (
@@ -92,7 +114,7 @@ export const AgentChat: FC = () => {
         <div className="absolute left-0 w-full h-full pb-[20px]">
           <CopilotChat
             className="w-full h-full"
-            RenderMessage={AgentRenderMessage}
+            RenderMessage={AgentMessageRenderer}
             labels={{
               title: t('your_assistant', 'Your Assistant'),
               initial: t(
