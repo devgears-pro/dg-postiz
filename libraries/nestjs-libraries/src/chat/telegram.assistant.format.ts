@@ -64,6 +64,18 @@ export function formatTelegramSystemNotice(text: string): string {
   return `<i>${escapeHtml(text)}</i>`;
 }
 
+const EMPTY_REPLY_NOTICE = {
+  uk: 'Не вдалося сформулювати відповідь. Перевірте результат у Postiz або повторіть запит.',
+  en: 'Could not compose a reply. Check the result in Postiz or retry the request.',
+};
+
+export function formatEmptyReplyNotice(languageCode?: string): string {
+  const language = languageCode?.split('-')[0]?.toLowerCase();
+  return formatTelegramSystemNotice(
+    language === 'uk' ? EMPTY_REPLY_NOTICE.uk : EMPTY_REPLY_NOTICE.en
+  );
+}
+
 export function splitTelegramMessage(text: string, maxLength = 4096): string[] {
   if (!text) {
     return [];

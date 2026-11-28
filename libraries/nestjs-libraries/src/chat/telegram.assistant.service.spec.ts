@@ -532,4 +532,53 @@ describe('TelegramAssistantService', () => {
     const body = JSON.parse(String(sendCall?.[1]?.body)) as { text?: string };
     expect(body.text).toMatch(/no chats yet/i);
   });
+
+  it('[TC-2-31-1] sends a system notice when the assistant returns empty text', async () => {
+    channels.getAuthorizedLink.mockResolvedValue({
+      status: 'ok',
+      link: LINK,
+    });
+    channels.handleIncomingMessage.mockResolvedValue({
+      status: 'ok',
+      threadId: 'thread-1',
+      text: '',
+      generatedImages: [],
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/sendChatAction')) {
+        return jsonResponse({ ok: true, result: true });
+      }
+      if (url.endsWith('/sendMessage')) {
+        return jsonResponse({ ok: true, result: { message_id: 1 } });
+      }
+      throw new Error(`Unexpected Telegram call: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await service.processUpdate({
+      update_id: 110,
+      message: {
+        message_id: 10,
+        from: { id: 1, username: 'alice', language_code: 'uk' },
+        chat: { id: 1, type: 'private' },
+        text: 'Delete the scheduled post',
+      },
+    });
+
+    const sentTexts: unknown[] = fetchMock.mock.calls
+      .filter(([url]) => String(url).endsWith('/sendMessage'))
+      .map(([, init]) => JSON.parse(String(init?.body)));
+    const texts = sentTexts.flatMap((body) =>
+      typeof body === 'object' &&
+      body !== null &&
+      'text' in body &&
+      typeof body.text === 'string'
+        ? [body.text]
+        : []
+    );
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toContain('<i>');
+    expect(texts[0]).toContain('Не вдалося');
+  });
 });

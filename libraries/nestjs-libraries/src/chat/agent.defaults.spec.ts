@@ -55,3 +55,16 @@ describe('agent image capabilities', () => {
     expect(withoutProvider.capabilities).toEqual(defaults.capabilities);
   });
 });
+
+describe('agent generation defaults', () => {
+  it('[TC-2-33-1] defaults to ten steps and lets the environment override', async () => {
+    const defaults = await loadAgentDefaults({}, { toolCatalog: [] });
+    const fromEnv = await loadAgentDefaults(
+      { POSTIZ_AI_MAX_STEPS: '7' },
+      { toolCatalog: [] }
+    );
+
+    expect(defaults.generation.maxSteps).toBe(10);
+    expect(fromEnv.generation.maxSteps).toBe(7);
+  });
+});

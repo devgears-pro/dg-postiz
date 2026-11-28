@@ -31,7 +31,7 @@ import {
 import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { useParams } from 'next/navigation';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { mutate } from 'swr';
+import useSWR, { mutate } from 'swr';
 import { AddEditModal } from '@gitroom/frontend/components/new-launch/add.edit.modal';
 import dayjs from 'dayjs';
 import { fromUtc } from '@gitroom/frontend/components/layout/set.timezone';
@@ -42,12 +42,28 @@ import { useToaster } from '@gitroom/react/toaster/toaster';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
 import type { SelectedDoc } from '@gitroom/frontend/components/docs/docs.picker.modal';
 import { formatUserMessageContent } from './agent.message.format';
+import { AgentRenderMessage, AgentTurnProvider } from './agent.turn';
 
 export const AgentChat: FC = () => {
   const { backendUrl } = useVariables();
   const params = useParams<{ id: string }>();
   const { properties } = useContext(PropertiesContext);
   const t = useT();
+  const fetch = useFetch();
+  const loadLimits = useCallback(async (): Promise<{ maxSteps?: number }> => {
+    const response = await fetch('/copilot/limits');
+    const data: unknown = await response.json();
+    if (
+      typeof data === 'object' &&
+      data !== null &&
+      'maxSteps' in data &&
+      typeof data.maxSteps === 'number'
+    ) {
+      return { maxSteps: data.maxSteps };
+    }
+    return {};
+  }, [fetch]);
+  const { data: limits } = useSWR('/copilot/limits', loadLimits);
   const [historyLoading, setHistoryLoading] = useState(params.id !== 'new');
 
   return (
@@ -89,8 +105,10 @@ export const AgentChat: FC = () => {
           </div>
         )}
         <div className="absolute left-0 w-full h-full pb-[20px]">
-          <CopilotChat
-            className="w-full h-full"
+          <AgentTurnProvider maxSteps={limits?.maxSteps ?? 10}>
+            <CopilotChat
+              className="w-full h-full"
+              RenderMessage={AgentRenderMessage}
             labels={{
               title: t('your_assistant', 'Your Assistant'),
               initial: t('agent_welcome_message', `Hello, I am your Postiz agent 🙌🏻.
@@ -123,7 +141,8 @@ You can also use me as an MCP Server, check Settings >> Agents / Dev
             }}
             UserMessage={Message}
             Input={NewInput}
-          />
+            />
+          </AgentTurnProvider>
         </div>
       </div>
     </CopilotKit>
