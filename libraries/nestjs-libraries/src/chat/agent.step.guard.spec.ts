@@ -1,7 +1,7 @@
-import type { ModuleRef } from '@nestjs/core';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', async () => {
@@ -11,15 +11,16 @@ vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', async () => {
 
 import { resolveAgentConfig } from '@gitroom/helpers/agent/agent.config.schema';
 import { loadAgentDefaults } from './agent.defaults';
-import {
-  AGENT_RUNTIME,
-  type AgentRuntimeLike,
-} from './agent.runtime.token';
+import { AGENT_RUNTIME, type AgentRuntimeLike } from './agent.runtime.token';
 import { LoadToolsService } from './load.tools.service';
 
 const usage = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
 
-const textResponse = (text: string) => ({
+type GenerateResult = Awaited<
+  ReturnType<MastraLanguageModelV2Mock['doGenerate']>
+>;
+
+const textResponse = (text: string): GenerateResult => ({
   content: [{ type: 'text' as const, text }],
   finishReason: 'stop' as const,
   usage,
@@ -29,7 +30,7 @@ const textResponse = (text: string) => ({
   stream: new ReadableStream(),
 });
 
-const toolCallResponse = (call: number) => ({
+const toolCallResponse = (call: number): GenerateResult => ({
   content: [
     {
       type: 'tool-call' as const,
@@ -53,6 +54,13 @@ const echoTool = createTool({
   execute: async ({ value }) => ({ echoed: value }),
 });
 
+let testingModule: TestingModule | undefined;
+
+afterEach(async () => {
+  await testingModule?.close();
+  testingModule = undefined;
+});
+
 const createAgent = async (
   model: MastraLanguageModelV2Mock,
   maxSteps?: number
@@ -72,11 +80,14 @@ const createAgent = async (
       skills: [],
     }),
   };
-  const moduleRef = {
-    get: (token: unknown) => (token === AGENT_RUNTIME ? runtime : undefined),
-  } as unknown as ModuleRef;
+  testingModule = await Test.createTestingModule({
+    providers: [
+      LoadToolsService,
+      { provide: AGENT_RUNTIME, useValue: runtime },
+    ],
+  }).compile();
 
-  return new LoadToolsService(moduleRef).agent();
+  return testingModule.get(LoadToolsService).agent();
 };
 
 describe('assistant step guard', () => {
